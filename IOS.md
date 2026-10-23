@@ -130,6 +130,5 @@ Bump the `CACHE` name in `sw.js` for the web version, as in the README.
 
 - No Mac was used to build this project. Compile errors in `SnoreMicPlugin.swift` or
   `SnoreAudio.swift` are possible. Read the red message in Xcode, or send it to Claude.
-- `allowBluetooth` can show a deprecation warning in new Xcode versions. It is only a warning.
 - If Xcode cannot find the `Capacitor` module, use **File > Packages > Reset Package Caches**, then build again.
 - If the web view is blank, run `npm run sync` again. The folder `ios/App/App/public` is made by that command.

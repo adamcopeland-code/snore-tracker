@@ -218,7 +218,7 @@ public class SnoreMicPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private func configureSession() throws {
         let s = AVAudioSession.sharedInstance()
-        try s.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .allowBluetooth])
+        try s.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .allowBluetoothHFP])
         try s.setActive(true)
     }
 

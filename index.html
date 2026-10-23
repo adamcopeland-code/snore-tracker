@@ -1,0 +1,2152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snore Tracker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Record a night, see when and how loudly you snore, and test what helps.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0a0d1c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f3fa" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Snore Tracker">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root {
+  color-scheme: dark;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* neutrals: deep navy / indigo */
+  --bg: #0a0d1c;
+  --bg-2: #0f1328;
+  --surface: #141a33;
+  --surface-2: #1b2242;
+  --border: #283056;
+  --text: #e9ecfa;
+  --text-dim: #a4acd0;
+  --text-faint: #8089b0;
+  --focus: #8fb4ff;
+  /* one warm accent, plus its intensity scale (same hue, rising saturation) */
+  --accent: #ffb347;
+  --accent-ink: #2a1600;
+  --accent-soft: rgba(255, 179, 71, 0.14);
+  --c-quiet: #a49985;
+  --c-light: #d6a85f;
+  --c-loud: #f28f22;
+  --c-epic: #ff5a14;
+  /* semantic: rating chips and states */
+  --ok: #62d6a0;   --ok-bg: rgba(98, 214, 160, 0.14);
+  --mild: #e6cf5c; --mild-bg: rgba(230, 207, 92, 0.14);
+  --mod: #f59a45;  --mod-bg: rgba(245, 154, 69, 0.16);
+  --bad: #ff7272;  --bad-bg: rgba(255, 114, 114, 0.14);
+  --good-delta: #62d6a0;
+  --bad-delta: #ff9a6b;
+  /* charts */
+  --chart-text: var(--text-dim);
+  --chart-grid: rgba(164, 172, 208, 0.18);
+  --chart-line: var(--accent);
+  /* sleep mode */
+  --sleep-bg: #030408;
+  --sleep-fg: #ffb347;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg: #f2f3fa;
+    --bg-2: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #e8eaf6;
+    --border: #cfd4ea;
+    --text: #141935;
+    --text-dim: #444c74;
+    --text-faint: #646d96;
+    --focus: #1c4fd8;
+    --accent: #b25800;
+    --accent-ink: #ffffff;
+    --accent-soft: rgba(178, 88, 0, 0.12);
+    --c-quiet: #b7a98f;
+    --c-light: #dfa346;
+    --c-loud: #e8731a;
+    --c-epic: #d4440a;
+    --ok: #0b7a4e;   --ok-bg: rgba(11, 122, 78, 0.12);
+    --mild: #7a6000; --mild-bg: rgba(160, 125, 0, 0.14);
+    --mod: #a14a00;  --mod-bg: rgba(200, 100, 0, 0.13);
+    --bad: #b3202a;  --bad-bg: rgba(179, 32, 42, 0.10);
+    --good-delta: #0b7a4e;
+    --bad-delta: #a14a00;
+    --chart-grid: rgba(68, 76, 116, 0.16);
+  }
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 var(--font);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+h1, h2, h3 { line-height: 1.2; margin: 0; }
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 17px; font-weight: 650; }
+p { margin: 0 0 10px; }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: var(--text-dim); }
+.faint { color: var(--text-faint); }
+.small { font-size: 13px; }
+
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-top: max(16px, env(safe-area-inset-top));
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+.wrap:focus { outline: none; }
+.page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 6px 0 16px; flex-wrap: wrap; }
+.back { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; text-decoration: none; font-weight: 600; margin-left: -6px; padding: 0 6px; }
+
+/* tab bar */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabs {
+  max-width: 720px; margin: 0 auto; display: flex;
+  padding-left: max(8px, env(safe-area-inset-left));
+  padding-right: max(8px, env(safe-area-inset-right));
+}
+.tabs a {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 58px; padding: 6px 4px; color: var(--text-faint); text-decoration: none; font-size: 12px; font-weight: 600;
+}
+.tabs a[aria-current="page"] { color: var(--accent); }
+.tabs svg { width: 22px; height: 22px; }
+
+/* cards and layout */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin: 0 0 14px; min-width: 0; }
+fieldset.card { margin-left: 0; margin-right: 0; }
+.card > h2, fieldset.card > legend { margin-bottom: 10px; }
+legend { padding: 0; font-size: 17px; font-weight: 650; }
+.card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.stack > * + * { margin-top: 12px; }
+.btn-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 44px; padding: 8px 16px; border-radius: 12px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  font-weight: 600; text-decoration: none;
+}
+.btn:hover { border-color: var(--text-faint); }
+.btn-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.btn-danger { background: transparent; color: var(--bad); border-color: var(--bad); }
+.btn-danger.solid { background: var(--bad); color: #16080a; }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn-start {
+  width: 100%; min-height: 76px; font-size: 21px; font-weight: 700; border-radius: 20px; border: 0; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; gap: 12px;
+}
+.btn-start svg { width: 28px; height: 28px; }
+.btn-start:active { transform: scale(0.99); }
+.hint { margin: 10px 2px 0; font-size: 13px; color: var(--text-dim); text-align: center; }
+
+.alert { border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 12px; padding: 12px 14px; margin: 0 0 14px; }
+.alert strong { display: block; margin-bottom: 4px; }
+.alert ul { margin: 6px 0 0; padding-left: 20px; }
+.note { border: 1px solid var(--border); background: var(--surface-2); border-radius: 12px; padding: 10px 12px; font-size: 14px; color: var(--text-dim); }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 650; line-height: 1.6; border: 1px solid transparent; white-space: nowrap; }
+.rate-quiet { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
+.rate-mild { color: var(--mild); background: var(--mild-bg); border-color: var(--mild); }
+.rate-moderate { color: var(--mod); background: var(--mod-bg); border-color: var(--mod); }
+.rate-severe { color: var(--bad); background: var(--bad-bg); border-color: var(--bad); }
+.cls-chip { color: var(--text); background: var(--surface-2); border-color: var(--border); gap: 6px; }
+.cls-chip::before { content: ""; width: 9px; height: 9px; border-radius: 3px; background: var(--dot, var(--c-light)); }
+.cls-quiet { --dot: var(--c-quiet); } .cls-light { --dot: var(--c-light); } .cls-loud { --dot: var(--c-loud); } .cls-epic { --dot: var(--c-epic); }
+
+.tag-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag {
+  min-height: 40px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); font-weight: 600; font-size: 14px;
+}
+.tag[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.tag[aria-pressed="true"]::before { content: "\2713\00a0"; color: var(--accent); }
+.add-row { display: flex; gap: 8px; margin-top: 12px; }
+.add-row input { flex: 1; min-width: 0; }
+input[type="text"], textarea, select {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; min-height: 44px; width: 100%;
+}
+textarea { min-height: 96px; resize: vertical; }
+select { width: auto; }
+
+/* score */
+.score-row { display: flex; align-items: center; gap: 16px; margin-bottom: 14px; }
+.score-num { font-size: 56px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.score-side { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0 0 14px; }
+.stats > div { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.stats dt { font-size: 12px; color: var(--text-dim); font-weight: 600; }
+.stats dd { margin: 2px 0 0; font-size: 20px; font-weight: 700; }
+.stats dd small { font-size: 12px; font-weight: 500; color: var(--text-dim); }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tile { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; border-left: 5px solid var(--dot); }
+.tile b { display: block; font-size: 22px; line-height: 1.2; }
+.tile span { font-size: 13px; color: var(--text-dim); }
+@media (min-width: 560px) {
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* charts */
+.chart { position: relative; }
+.chart canvas { display: block; width: 100%; height: 240px; touch-action: pan-y; border-radius: 8px; }
+.chart.short canvas { height: 220px; }
+.tip {
+  position: absolute; z-index: 3; pointer-events: none; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1.45; white-space: nowrap; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; color: var(--text-dim); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--dot); display: inline-block; }
+
+/* lists */
+.list { list-style: none; margin: 0; padding: 0; }
+.row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center;
+  padding: 12px 4px; border-top: 1px solid var(--border); color: inherit; text-decoration: none; min-height: 56px;
+}
+.list > li:first-child .row { border-top: 0; }
+a.row:hover { background: var(--accent-soft); }
+.row .meta { color: var(--text-dim); font-size: 13px; }
+.row .title { font-weight: 650; }
+.row .right { display: flex; align-items: center; gap: 10px; justify-self: end; }
+.row .big { font-size: 20px; font-weight: 700; min-width: 3ch; text-align: right; }
+.minibar { grid-column: 1 / -1; height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.minibar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.sample { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.list > li:first-child.sample { border-top: 0; }
+.sample .t { font-weight: 650; }
+.sample .d { font-size: 13px; color: var(--text-dim); }
+.icon-btn { min-width: 44px; min-height: 44px; padding: 0 12px; }
+.delta { font-weight: 700; }
+.delta.up { color: var(--bad-delta); } .delta.down { color: var(--good-delta); }
+.kind { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-left: 6px; }
+
+details.card > summary { cursor: pointer; font-weight: 650; font-size: 17px; min-height: 28px; }
+details.card[open] > summary { margin-bottom: 10px; }
+.formula { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; overflow-wrap: anywhere; }
+
+/* confirm */
+.confirm { border: 1px solid var(--bad); background: var(--bad-bg); border-radius: 12px; padding: 12px; margin-top: 10px; }
+.confirm p { margin-bottom: 10px; }
+
+/* checklist */
+.check { list-style: none; margin: 0; padding: 0; }
+.check li + li { margin-top: 4px; }
+.check label { display: flex; gap: 12px; align-items: center; min-height: 44px; cursor: pointer; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+
+/* settings controls */
+.field { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 48px; }
+.field + .field { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 8px; }
+.field .lbl { font-weight: 600; }
+.field .sub { display: block; font-size: 13px; color: var(--text-dim); font-weight: 400; }
+.field input[type="range"] { width: 160px; accent-color: var(--accent); }
+.out { min-width: 3.2em; text-align: right; font-weight: 700; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface-2); }
+.seg label { flex: 1; text-align: center; position: relative; }
+.seg input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.seg span { display: block; padding: 10px 6px; min-height: 44px; color: var(--text-dim); font-weight: 650; }
+.seg input:checked + span { background: var(--accent); color: var(--accent-ink); }
+.seg input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: -3px; }
+.switch { position: relative; width: 52px; height: 32px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; width: 100%; height: 100%; }
+.switch i { position: absolute; inset: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; transition: background 0.15s; }
+.switch i::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--text-dim); transition: transform 0.15s; }
+.switch input:checked + i { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + i::after { transform: translateX(20px); background: var(--accent-ink); }
+.switch input:focus-visible + i { outline: 2px solid var(--focus); outline-offset: 2px; }
+.meter { height: 12px; background: var(--surface-2); border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+.meter i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+.preview { display: flex; align-items: center; justify-content: center; background: var(--sleep-bg); border-radius: 12px; padding: 14px; margin-top: 10px; }
+.preview b { font-size: 44px; font-weight: 300; color: var(--sleep-fg); }
+
+/* empty state illustration */
+.ghost { width: 100%; height: auto; display: block; margin: 4px 0 10px; }
+.ghost rect { stroke-width: 1.5; stroke-dasharray: 4 3; }
+.steps { margin: 0; padding-left: 20px; }
+.steps li { margin: 4px 0; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px);
+  max-width: min(92vw, 520px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 14px;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 80; text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* sleep mode */
+.sleep {
+  position: fixed; inset: 0; z-index: 60; background: var(--sleep-bg); color: var(--sleep-fg); --op: 0.25;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(16px, env(safe-area-inset-left));
+  -webkit-user-select: none; user-select: none; touch-action: manipulation; cursor: default;
+}
+.sleep-clock { font-size: clamp(72px, 24vw, 150px); font-weight: 200; line-height: 1; opacity: var(--op); letter-spacing: 0.02em; }
+.sleep-meta { font-size: 18px; opacity: calc(var(--op) * 0.9); text-align: center; }
+.sleep-level { width: min(72vw, 360px); height: 8px; border-radius: 4px; background: rgba(255, 179, 71, 0.12); overflow: hidden; opacity: calc(var(--op) * 1.6); }
+.sleep-level i { display: block; height: 100%; width: 100%; background: var(--sleep-fg); transform-origin: left; transform: scaleX(0); }
+.sleep-count { font-size: 16px; opacity: calc(var(--op) * 0.9); }
+.sleep-warn { font-size: 13px; max-width: 320px; text-align: center; opacity: calc(var(--op) * 1.4); }
+.sleep-controls { display: flex; flex-direction: column; align-items: center; gap: 10px; opacity: 0; pointer-events: none; transition: opacity 0.6s; }
+.sleep.show .sleep-controls { opacity: 1; pointer-events: auto; transition-duration: 0.15s; }
+.hold {
+  position: relative; overflow: hidden; width: 240px; min-height: 60px; border-radius: 16px; cursor: pointer;
+  background: transparent; color: var(--sleep-fg); border: 1.5px solid var(--sleep-fg); font-weight: 650; font-size: 18px;
+  -webkit-user-select: none; user-select: none; touch-action: none;
+}
+.hold .fill { position: absolute; inset: 0; background: var(--sleep-fg); opacity: 0.35; transform-origin: left; transform: scaleX(0); }
+.hold span.l { position: relative; }
+.sleep .hint { color: var(--sleep-fg); opacity: 0.7; margin: 0; }
+.sleep :focus-visible { outline-color: var(--sleep-fg); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+</style>
+</head>
+<body>
+<main id="main" class="wrap" tabindex="-1" aria-live="off"><p class="muted">Loading...</p></main>
+
+<nav class="tabbar" aria-label="Main">
+  <div class="tabs">
+    <a href="#/" data-tab="home">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span>Home</span>
+    </a>
+    <a href="#/history" data-tab="history">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20V11M12 20V4M19 20v-6"/></svg>
+      <span>History</span>
+    </a>
+    <a href="#/settings" data-tab="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      <span>Settings</span>
+    </a>
+  </div>
+</nav>
+
+<div id="sleep" class="sleep" hidden aria-label="Recording in progress">
+  <div class="sleep-clock" id="sClock">00:00</div>
+  <div class="sleep-meta">Recording <span id="sElapsed">0:00:00</span></div>
+  <div class="sleep-level" role="img" aria-label="Live sound level"><i id="sLevel"></i></div>
+  <div class="sleep-count"><span id="sCount">0</span> snores heard</div>
+  <div class="sleep-warn" id="sWarn" hidden>This browser cannot keep the screen awake. Turn off auto-lock in your device settings for tonight.</div>
+  <div class="sleep-controls" id="sControls">
+    <button type="button" class="hold" id="holdStop" aria-label="Stop recording. Press and hold for one and a half seconds."><i class="fill"></i><span class="l">Hold to stop</span></button>
+    <p class="hint small">Hold for 1.5 seconds</p>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<audio id="player" preload="none"></audio>
+<noscript><p style="padding:16px">Snore Tracker needs JavaScript.</p></noscript>
+<script>
+'use strict';
+
+// ---- storage
+const DB_NAME = 'snoretracker';
+const DB_VERSION = 1;
+const BUILTIN_FACTORS = ['Alcohol', 'Caffeine', 'Late meal', 'Blocked nose', 'Very tired', 'Stress', 'Exercise', 'Sleeping on back', 'New pillow'];
+const BUILTIN_REMEDIES = ['Nasal strips', 'Mouth tape', 'Side sleeping', 'Anti-snore pillow', 'Mouth guard', 'Humidifier', 'Nasal spray', 'Throat spray', 'No alcohol'];
+const DEFAULT_SETTINGS = {
+  key: 'app',
+  sensitivity: 'medium',
+  recordSamples: true,
+  maxSamples: 20,
+  autoStopHours: 0,
+  clockOpacity: 0.25,
+  customFactors: [],
+  customRemedies: []
+};
+
+function clampNum(v, lo, hi, dflt) {
+  v = Number(v);
+  if (!isFinite(v)) return dflt;
+  return Math.min(hi, Math.max(lo, v));
+}
+function normalizeSettings(s) {
+  const o = Object.assign({}, DEFAULT_SETTINGS, s || {});
+  o.key = 'app';
+  if (['low', 'medium', 'high'].indexOf(o.sensitivity) < 0) o.sensitivity = 'medium';
+  o.recordSamples = o.recordSamples !== false;
+  o.maxSamples = Math.round(clampNum(o.maxSamples, 5, 50, 20));
+  o.autoStopHours = [0, 6, 8, 10, 12].indexOf(Number(o.autoStopHours)) >= 0 ? Number(o.autoStopHours) : 0;
+  o.clockOpacity = clampNum(o.clockOpacity, 0.05, 0.6, 0.25);
+  o.customFactors = Array.isArray(o.customFactors) ? o.customFactors.map(String) : [];
+  o.customRemedies = Array.isArray(o.customRemedies) ? o.customRemedies.map(String) : [];
+  return o;
+}
+
+// Tiny promise wrapper around IndexedDB.
+const idb = (() => {
+  let opening = null;
+  function open() {
+    if (!opening) {
+      opening = new Promise((resolve, reject) => {
+        if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB is not available')); return; }
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains('sessions')) db.createObjectStore('sessions', { keyPath: 'id' });
+          if (!db.objectStoreNames.contains('samples')) {
+            const st = db.createObjectStore('samples', { keyPath: 'id' });
+            st.createIndex('sessionId', 'sessionId', { unique: false });
+          }
+          if (!db.objectStoreNames.contains('settings')) db.createObjectStore('settings', { keyPath: 'key' });
+        };
+        req.onsuccess = () => {
+          const db = req.result;
+          db.onversionchange = () => { db.close(); opening = null; };
+          resolve(db);
+        };
+        req.onerror = () => reject(req.error || new Error('Could not open the database'));
+        req.onblocked = () => reject(new Error('The database is blocked by another tab'));
+      });
+      opening.catch(() => { opening = null; });
+    }
+    return opening;
+  }
+  async function run(store, mode, fn) {
+    const db = await open();
+    return new Promise((resolve, reject) => {
+      let result;
+      const t = db.transaction(store, mode);
+      const r = fn(t.objectStore(store));
+      if (r) r.onsuccess = () => { result = r.result; };
+      t.oncomplete = () => resolve(result);
+      t.onerror = () => reject(t.error || (r && r.error) || new Error('Storage error'));
+      t.onabort = () => reject(t.error || new Error('Storage transaction aborted'));
+    });
+  }
+  return {
+    get: (s, k) => run(s, 'readonly', (st) => st.get(k)),
+    put: (s, v) => run(s, 'readwrite', (st) => st.put(v)),
+    del: (s, k) => run(s, 'readwrite', (st) => st.delete(k)),
+    all: (s) => run(s, 'readonly', (st) => st.getAll()),
+    clear: (s) => run(s, 'readwrite', (st) => st.clear()),
+    byIndex: (s, i, v) => run(s, 'readonly', (st) => st.index(i).getAll(v)),
+    async delByIndex(s, i, v) {
+      const keys = await run(s, 'readonly', (st) => st.index(i).getAllKeys(v));
+      if (!keys || !keys.length) return;
+      await run(s, 'readwrite', (st) => { keys.forEach((k) => st.delete(k)); return null; });
+    }
+  };
+})();
+
+// Every storage call goes through Store: it catches errors and shows a toast.
+const Store = {
+  async loadSettings() {
+    try { return normalizeSettings(await idb.get('settings', 'app')); }
+    catch (e) { reportError('Could not load your settings.', e); return normalizeSettings(null); }
+  },
+  async saveSettings(s) {
+    try { await idb.put('settings', s); return true; }
+    catch (e) { reportError('Could not save your settings.', e); return false; }
+  },
+  async allSessions() {
+    try { return (await idb.all('sessions')) || []; }
+    catch (e) { reportError('Could not load your nights.', e); return []; }
+  },
+  async saveSession(s) {
+    try { await idb.put('sessions', s); return true; }
+    catch (e) { reportError('Could not save this night.', e); return false; }
+  },
+  async deleteSession(id) {
+    try { await idb.delByIndex('samples', 'sessionId', id); await idb.del('sessions', id); return true; }
+    catch (e) { reportError('Could not delete this night.', e); return false; }
+  },
+  async putSample(rec) {
+    try { await idb.put('samples', rec); return true; }
+    catch (e) { reportError('Could not save an audio sample.', e); return false; }
+  },
+  async getSample(id) {
+    try { return await idb.get('samples', id); }
+    catch (e) { reportError('Could not load the audio sample.', e); return null; }
+  },
+  async deleteSample(id) {
+    try { await idb.del('samples', id); return true; }
+    catch (e) { reportError('Could not delete the audio sample.', e); return false; }
+  },
+  async samplesFor(sessionId) {
+    try { return (await idb.byIndex('samples', 'sessionId', sessionId)) || []; }
+    catch (e) { reportError('Could not read audio samples.', e); return []; }
+  },
+  async clearAll() {
+    try { await idb.clear('sessions'); await idb.clear('samples'); await idb.clear('settings'); return true; }
+    catch (e) { reportError('Could not delete your data.', e); return false; }
+  }
+};
+
+// ---- detector
+const SENS_DB = { low: 15, medium: 10, high: 6 };
+const CLASS_KEYS = ['quiet', 'light', 'loud', 'epic'];
+const round1 = (x) => Math.round(x * 10) / 10;
+const round2 = (x) => Math.round(x * 100) / 100;
+
+// Intensity class from peak dB above the noise floor.
+function classify(aboveDb) {
+  if (aboveDb < 12) return 'quiet';
+  if (aboveDb < 20) return 'light';
+  if (aboveDb < 30) return 'loud';
+  return 'epic';
+}
+
+// Pure snore detector. Feed it one frame at a time (about every 100 ms):
+//   push(db, bandRatio, nowMs) -> array of snore events that finished in this frame.
+// db is the frame level in dBFS, bandRatio is energy(60-1200 Hz) / total energy at that frame.
+class SnoreDetector {
+  constructor(opts) {
+    opts = opts || {};
+    this.frameMs = opts.frameMs || 100;
+    this.warmupMs = opts.warmupMs != null ? opts.warmupMs : 5000;
+    this.floorWindowMs = 60000;
+    this.confirmMs = 300;   // above threshold this long: a sound event starts
+    this.endMs = 300;       // below threshold this long: it ends
+    this.minEventMs = 400;
+    this.maxEventMs = 4000;
+    this.minGapMs = 2000;   // rhythm: another event 2 to 8 s earlier (start to start)
+    this.maxGapMs = 8000;
+    this.minBandRatio = 0.5;
+    this.gapResetMs = 2500; // a pause in frames (suspended page) closes any open event
+    this.setSensitivity(opts.sensitivity || 'medium');
+    this.reset();
+  }
+  setSensitivity(s) {
+    this.sensitivity = SENS_DB[s] != null ? s : 'medium';
+    this.offsetDb = SENS_DB[this.sensitivity];
+  }
+  reset() {
+    this.firstTs = null;
+    this.lastNow = null;
+    this.ts = [];
+    this.dbs = [];
+    this.head = 0;
+    this.floorDb = null;
+    this.lastFloorAt = -Infinity;
+    this.run = null;
+    this.recent = [];
+    this.stats = { sound: 0, tooShort: 0, tooLong: 0, highPitch: 0, qualified: 0, snores: 0 };
+  }
+  get thresholdDb() { return this.floorDb == null ? null : this.floorDb + this.offsetDb; }
+
+  push(db, bandRatio, nowMs) {
+    const out = [];
+    if (!isFinite(db)) db = -100;
+    db = Math.max(-100, db);
+    if (this.firstTs == null) this.firstTs = nowMs;
+    if (this.lastNow != null && nowMs - this.lastNow > this.gapResetMs) {
+      const ev = this._closeRun();
+      if (ev) this._handle(ev, out);
+    }
+    this.lastNow = nowMs;
+
+    // rolling 60 s buffer of frame levels; the noise floor is its 20th percentile, refreshed every second
+    this.ts.push(nowMs);
+    this.dbs.push(db);
+    while (this.head < this.ts.length && this.ts[this.head] < nowMs - this.floorWindowMs) this.head++;
+    if (this.head > 2000) {
+      this.ts = this.ts.slice(this.head);
+      this.dbs = this.dbs.slice(this.head);
+      this.head = 0;
+    }
+    if (nowMs - this.lastFloorAt >= 1000) {
+      this.lastFloorAt = nowMs;
+      this._updateFloor();
+    }
+    if (this.floorDb == null || nowMs - this.firstTs < this.warmupMs) return out;
+
+    const thr = this.floorDb + this.offsetDb;
+    const above = db > thr;
+    let r = this.run;
+    if (above) {
+      if (!r) {
+        r = this.run = { start: nowMs, lastAbove: nowMs, peakDb: db, ratio: bandRatio, floorDb: this.floorDb, thr, confirmed: false, belowSince: null };
+      } else {
+        r.lastAbove = nowMs;
+        r.belowSince = null;
+        if (db > r.peakDb) { r.peakDb = db; r.ratio = bandRatio; }
+      }
+      if (!r.confirmed && r.lastAbove + this.frameMs - r.start >= this.confirmMs) r.confirmed = true;
+    } else if (r) {
+      if (r.belowSince == null) r.belowSince = nowMs;
+      if (nowMs - r.belowSince + this.frameMs >= this.endMs) {
+        const ev = this._closeRun();
+        if (ev) this._handle(ev, out);
+      }
+    }
+    return out;
+  }
+
+  // Close any open event (end of recording).
+  flush() {
+    const out = [];
+    const ev = this._closeRun();
+    if (ev) this._handle(ev, out);
+    return out;
+  }
+
+  _updateFloor() {
+    const n = this.dbs.length - this.head;
+    if (n < 10) { this.floorDb = null; return; }
+    const a = Float64Array.from(this.dbs.slice(this.head)).sort();
+    this.floorDb = a[Math.floor(0.2 * (n - 1))];
+  }
+  _closeRun() {
+    const r = this.run;
+    this.run = null;
+    if (!r || !r.confirmed) return null;
+    const end = r.lastAbove + this.frameMs;
+    return { start: r.start, end, durMs: end - r.start, peakDb: r.peakDb, aboveDb: r.peakDb - r.floorDb, floorDb: r.floorDb, ratio: r.ratio };
+  }
+  _handle(s, out) {
+    this.stats.sound++;
+    if (s.durMs < this.minEventMs) { this.stats.tooShort++; return; }
+    if (s.durMs > this.maxEventMs) { this.stats.tooLong++; return; }
+    if (!(s.ratio >= this.minBandRatio)) { this.stats.highPitch++; return; }
+    this.stats.qualified++;
+    this.recent = this.recent.filter((e) => s.start - e.start <= this.maxGapMs);
+    const rec = { start: s.start, counted: false, ev: s };
+    let partnered = false;
+    for (const e of this.recent) {
+      const d = s.start - e.start;
+      if (d >= this.minGapMs && d <= this.maxGapMs) {
+        partnered = true;
+        if (!e.counted) { e.counted = true; out.push(this._snore(e.ev, true)); }
+      }
+    }
+    if (partnered) { rec.counted = true; out.push(this._snore(s, false)); }
+    this.recent.push(rec);
+  }
+  _snore(s, retro) {
+    this.stats.snores++;
+    return Object.assign({}, s, { cls: classify(s.aboveDb), snore: true, retro });
+  }
+}
+
+// Snore Score: 100 x (1 quiet + 2 light + 3 loud + 4 epic seconds) / (4 x total seconds).
+function ratingFor(score) {
+  if (score < 10) return { key: 'quiet', label: 'Quiet' };
+  if (score < 25) return { key: 'mild', label: 'Mild' };
+  if (score <= 50) return { key: 'moderate', label: 'Moderate' };
+  return { key: 'severe', label: 'Severe' };
+}
+function computeScore(minutes, totalSec) {
+  let q = 0, l = 0, o = 0, e = 0, sn = 0;
+  const list = Array.isArray(minutes) ? minutes : [];
+  for (const m of list) {
+    q += m.quietSec || 0; l += m.lightSec || 0; o += m.loudSec || 0; e += m.epicSec || 0; sn += m.snoreSec || 0;
+  }
+  const classSum = q + l + o + e;
+  const snore = sn > 0 ? sn : classSum;
+  const total = totalSec > 0 ? totalSec : list.length * 60;
+  if (!(total > 0)) {
+    return { score: 0, rating: ratingFor(0), totalSec: 0, snoreSec: 0, snorePct: 0, loudPct: 0, epicPct: 0, quietSec: 0, lightSec: 0, loudSec: 0, epicSec: 0 };
+  }
+  const raw = Math.min(100, 100 * (q + 2 * l + 3 * o + 4 * e) / (4 * total));
+  const score = Math.round(raw * 10) / 10;
+  const pct = (x) => Math.min(100, 100 * x / total);
+  return {
+    score, rating: ratingFor(score), totalSec: total, snoreSec: snore,
+    snorePct: pct(snore), loudPct: pct(o), epicPct: pct(e),
+    quietSec: q, lightSec: l, loudSec: o, epicSec: e
+  };
+}
+
+// ---- recorder
+function pickMime() {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return '';
+  const prefs = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'];
+  for (const m of prefs) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* try next */ } }
+  return '';
+}
+
+function sampleHour(t, startMs) { return Math.max(0, Math.floor((t - startMs) / 3600000)); }
+
+// Decide what to do with a new sample candidate: keep the loudest N, but keep at least one per hour of the night.
+function chooseSampleSlot(samples, cand, max, startMs) {
+  if (samples.length < max) return { action: 'add' };
+  const counts = {};
+  for (const s of samples) { const h = sampleHour(s.t, startMs); counts[h] = (counts[h] || 0) + 1; }
+  const candEmpty = !counts[sampleHour(cand.t, startMs)];
+  let victim = null;
+  for (const s of samples) {
+    if (counts[sampleHour(s.t, startMs)] > 1 && (!victim || s.aboveDb < victim.aboveDb)) victim = s;
+  }
+  if (!victim) return { action: 'skip' };
+  if (candEmpty || cand.aboveDb > victim.aboveDb) return { action: 'replace', victim };
+  return { action: 'skip' };
+}
+
+// Microphone -> AnalyserNode. Used for recording and for the settings mic test.
+class AudioInput {
+  constructor() {
+    this.stream = null; this.ctx = null; this.analyser = null;
+    this.timeBuf = null; this.freqBuf = null; this.byteBuf = null;
+    this.lo = 0; this.hi = 0;
+  }
+  async open() {
+    if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const err = new Error('Microphone access needs a secure (https) page.');
+      err.name = 'InsecureContext';
+      throw err;
+    }
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
+      const src = this.ctx.createMediaStreamSource(this.stream);
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyser.smoothingTimeConstant = 0.2;
+      src.connect(this.analyser);
+    } catch (e) {
+      this.close();
+      throw e;
+    }
+    const a = this.analyser;
+    this.timeBuf = new Float32Array(a.fftSize);
+    this.freqBuf = new Float32Array(a.frequencyBinCount);
+    this.byteBuf = new Uint8Array(a.fftSize);
+    const binHz = this.ctx.sampleRate / a.fftSize;
+    this.lo = Math.max(1, Math.ceil(60 / binHz));
+    this.hi = Math.min(a.frequencyBinCount - 1, Math.floor(1200 / binHz));
+  }
+  // One frame: level in dBFS and the 60-1200 Hz share of the energy.
+  read() {
+    const a = this.analyser, tb = this.timeBuf;
+    if (a.getFloatTimeDomainData) {
+      a.getFloatTimeDomainData(tb);
+    } else {
+      a.getByteTimeDomainData(this.byteBuf);
+      for (let i = 0; i < tb.length; i++) tb[i] = (this.byteBuf[i] - 128) / 128;
+    }
+    let sum = 0;
+    for (let i = 0; i < tb.length; i++) sum += tb[i] * tb[i];
+    const rms = Math.sqrt(sum / tb.length);
+    const db = rms > 0 ? Math.max(-100, 20 * Math.log10(rms)) : -100;
+
+    const fb = this.freqBuf;
+    if (a.getFloatFrequencyData) {
+      a.getFloatFrequencyData(fb);
+    } else {
+      const bb = new Uint8Array(fb.length);
+      a.getByteFrequencyData(bb);
+      for (let i = 0; i < fb.length; i++) fb[i] = a.minDecibels + (bb[i] / 255) * (a.maxDecibels - a.minDecibels);
+    }
+    let band = 0, total = 0;
+    for (let i = 1; i < fb.length; i++) {
+      const d = fb[i];
+      if (!(d > -200)) continue;
+      const p = Math.pow(10, d / 10);
+      total += p;
+      if (i >= this.lo && i <= this.hi) band += p;
+    }
+    return { db, ratio: total > 0 ? band / total : 0 };
+  }
+  close() {
+    try { if (this.stream) this.stream.getTracks().forEach((t) => t.stop()); } catch (e) { /* ignore */ }
+    try { if (this.ctx && this.ctx.state !== 'closed') this.ctx.close(); } catch (e) { /* ignore */ }
+    this.stream = null; this.ctx = null;
+  }
+}
+
+// Records one night: level meter, snore detection, per-minute stats, audio samples, persistence.
+class NightRecorder {
+  constructor(settings, ui) {
+    this.settings = settings;
+    this.ui = ui || {};
+    this.input = null; this.det = null; this.timer = null; this.session = null;
+    this.base = 0; this.curIdx = -1; this.snoreCount = 0;
+    this.sampleOn = false; this.mime = ''; this.segTimer = null; this.curSeg = null;
+    this.ring = []; this.pending = []; this.samples = []; this.writes = [];
+    this.wake = null; this.wakeOk = false; this.stopped = false; this.autoStopFired = false;
+    this.saving = Promise.resolve();
+    this._onVis = () => this.onVisible();
+  }
+
+  async start() {
+    const input = new AudioInput();
+    await input.open();
+    this.input = input;
+    try {
+      const now = Date.now();
+      this.base = Math.floor(now / 60000) * 60000;
+      this.session = {
+        id: String(now), start: now, end: null, minutes: [], samplesMeta: [], factors: [], remedies: [],
+        notes: '', sensitivity: this.settings.sensitivity, sampleNote: '', lastSave: now
+      };
+      this.det = new SnoreDetector({ sensitivity: this.settings.sensitivity });
+      this.setupSamples();
+      await this.requestWake();
+      document.addEventListener('visibilitychange', this._onVis);
+      this.ensureMinute(0);
+      this.curIdx = 0;
+      await this.persist();
+      this.timer = setInterval(() => this.tick(), 100);
+    } catch (e) {
+      this.releaseAll();
+      throw e;
+    }
+  }
+
+  get startMs() { return this.session ? this.session.start : 0; }
+
+  // ---- wake lock and visibility
+  async requestWake() {
+    try {
+      if (!('wakeLock' in navigator)) { this.wakeOk = false; }
+      else if (!this.wake || this.wake.released) {
+        this.wake = await navigator.wakeLock.request('screen');
+        this.wakeOk = true;
+      }
+    } catch (e) { this.wakeOk = false; }
+    if (this.ui.onWake) this.ui.onWake(this.wakeOk);
+  }
+  onVisible() {
+    if (document.visibilityState !== 'visible' || this.stopped) return;
+    this.requestWake();
+    const c = this.input && this.input.ctx;
+    if (c && c.state !== 'running' && c.state !== 'closed') c.resume().catch(() => {});
+  }
+
+  // ---- frame loop
+  tick() {
+    if (this.stopped) return;
+    const now = Date.now();
+    let r;
+    try { r = this.input.read(); } catch (e) { return; }
+    const idx = Math.floor((now - this.base) / 60000);
+    if (idx !== this.curIdx) { this.ensureMinute(idx); this.curIdx = idx; this.persist(); }
+    const m = this.session.minutes[idx];
+    if (r.db > m.peakDb) m.peakDb = round1(r.db);
+    const evs = this.det.push(r.db, r.ratio, now);
+    if (this.det.floorDb != null) m.floorDb = round1(this.det.floorDb);
+    for (const ev of evs) this.onSnore(ev);
+    if (this.ui.onTick) this.ui.onTick({ db: r.db, count: this.snoreCount, now, floorDb: this.det.floorDb });
+    const h = this.settings.autoStopHours;
+    if (h && !this.autoStopFired && now - this.session.start >= h * 3600000) {
+      this.autoStopFired = true;
+      if (this.ui.onAutoStop) this.ui.onAutoStop();
+    }
+  }
+
+  ensureMinute(idx) {
+    const mins = this.session.minutes;
+    while (mins.length <= idx) {
+      mins.push({ t: this.base + mins.length * 60000, snoreSec: 0, quietSec: 0, lightSec: 0, loudSec: 0, epicSec: 0, peakDb: -100, floorDb: null });
+    }
+    return mins[idx];
+  }
+
+  onSnore(ev) {
+    this.snoreCount++;
+    const key = ev.cls + 'Sec';
+    let t = ev.start;
+    while (t < ev.end) {
+      const idx = Math.max(0, Math.floor((t - this.base) / 60000));
+      const mEnd = this.base + (idx + 1) * 60000;
+      const part = Math.min(ev.end, mEnd) - t;
+      const m = this.ensureMinute(idx);
+      m.snoreSec = round2(m.snoreSec + part / 1000);
+      m[key] = round2(m[key] + part / 1000);
+      t += part;
+    }
+    if (this.sampleOn && ev.aboveDb >= 12) this.sampleCandidate(ev);
+  }
+
+  persist() {
+    const s = this.session;
+    s.lastSave = Date.now();
+    s.samplesMeta = this.samples.map((x) => Object.assign({}, x));
+    this.saving = this.saving.then(() => Store.saveSession(s));
+    return this.saving;
+  }
+
+  // ---- audio samples: each 10 s segment is its own standalone file
+  setupSamples() {
+    if (!this.settings.recordSamples) { this.session.sampleNote = 'off'; return; }
+    if (typeof MediaRecorder === 'undefined') { this.session.sampleNote = 'unsupported'; return; }
+    this.mime = pickMime();
+    this.curSeg = this.startSegment();
+    if (!this.curSeg) return;
+    this.sampleOn = true;
+    this.segTimer = setInterval(() => this.rotateSegment(), 10000);
+  }
+  sampleFail() {
+    this.sampleOn = false;
+    this.session.sampleNote = this.session.sampleNote || 'error';
+    clearInterval(this.segTimer);
+  }
+  startSegment() {
+    let mr;
+    try {
+      mr = this.mime
+        ? new MediaRecorder(this.input.stream, { mimeType: this.mime, audioBitsPerSecond: 48000 })
+        : new MediaRecorder(this.input.stream);
+    } catch (e) {
+      try { mr = new MediaRecorder(this.input.stream); }
+      catch (e2) { this.session.sampleNote = typeof MediaRecorder === 'undefined' ? 'unsupported' : 'error'; return null; }
+    }
+    const seg = { t0: Date.now(), t1: null, mr, chunks: [], blob: null, done: null };
+    seg.done = new Promise((resolve) => {
+      mr.ondataavailable = (e) => { if (e.data && e.data.size) seg.chunks.push(e.data); };
+      mr.onerror = () => { resolve(seg); };
+      mr.onstop = () => {
+        seg.t1 = Date.now();
+        seg.blob = new Blob(seg.chunks, { type: mr.mimeType || this.mime || 'audio/webm' });
+        resolve(seg);
+      };
+    });
+    try { mr.start(); } catch (e) { this.session.sampleNote = 'error'; return null; }
+    return seg;
+  }
+  rotateSegment() {
+    if (this.stopped || !this.sampleOn) return;
+    const old = this.curSeg;
+    const next = this.startSegment(); // start the new one first so no audio is lost
+    this.curSeg = next;
+    if (old && old.mr.state !== 'inactive') {
+      try { old.mr.stop(); } catch (e) { /* ignore */ }
+      old.done.then((seg) => this.segmentDone(seg));
+    }
+    if (!next) this.sampleFail();
+  }
+  segmentDone(seg) {
+    if (!seg || !seg.blob || seg.blob.size < 400) return;
+    this.ring.push(seg);
+    while (this.ring.length > 2) this.ring.shift(); // ring buffer: last 2 finished chunks
+    const keep = [];
+    for (const c of this.pending) {
+      if (c.mid >= seg.t0 && c.mid <= seg.t1) this.offer(seg, c);
+      else if (c.mid > seg.t1) keep.push(c);
+    }
+    this.pending = keep;
+  }
+  sampleCandidate(ev) {
+    const cand = { mid: (ev.start + ev.end) / 2, t: ev.start, aboveDb: ev.aboveDb, peakDb: ev.peakDb, cls: ev.cls };
+    for (const seg of this.ring) {
+      if (cand.mid >= seg.t0 && cand.mid <= seg.t1) { this.offer(seg, cand); return; }
+    }
+    this.pending.push(cand);
+  }
+  offer(seg, cand) {
+    const id = this.session.id + '-' + seg.t0;
+    const existing = this.samples.find((s) => s.id === id);
+    if (existing) {
+      if (cand.aboveDb > existing.aboveDb) {
+        Object.assign(existing, { aboveDb: round1(cand.aboveDb), peakDb: round1(cand.peakDb), cls: cand.cls, t: cand.t });
+        this.writeSample(existing, seg);
+      }
+      return;
+    }
+    const meta = {
+      id, sessionId: this.session.id, t: cand.t, peakDb: round1(cand.peakDb), aboveDb: round1(cand.aboveDb), cls: cand.cls,
+      mime: seg.blob.type || this.mime, durationMs: seg.t1 - seg.t0, clipStart: seg.t0
+    };
+    const choice = chooseSampleSlot(this.samples, meta, this.settings.maxSamples, this.session.start);
+    if (choice.action === 'skip') return;
+    if (choice.action === 'replace') {
+      this.samples = this.samples.filter((s) => s !== choice.victim);
+      this.writes.push(Store.deleteSample(choice.victim.id));
+    }
+    this.samples.push(meta);
+    this.writeSample(meta, seg);
+  }
+  writeSample(meta, seg) {
+    this.writes.push(Store.putSample(Object.assign({}, meta, { blob: seg.blob })));
+  }
+  async finishSamples() {
+    clearInterval(this.segTimer);
+    const seg = this.curSeg;
+    this.curSeg = null;
+    if (seg && seg.mr.state !== 'inactive') {
+      try { seg.mr.stop(); } catch (e) { /* ignore */ }
+      const done = await Promise.race([seg.done, new Promise((r) => setTimeout(() => r(null), 3000))]);
+      this.segmentDone(done);
+    }
+    this.pending = [];
+    await Promise.all(this.writes);
+  }
+
+  releaseAll() {
+    clearInterval(this.timer);
+    clearInterval(this.segTimer);
+    document.removeEventListener('visibilitychange', this._onVis);
+    try { if (this.wake && !this.wake.released) this.wake.release(); } catch (e) { /* ignore */ }
+    this.wake = null;
+    if (this.input) this.input.close();
+  }
+
+  async stop() {
+    if (this.stopped) return this.session;
+    this.stopped = true;
+    clearInterval(this.timer);
+    const now = Date.now();
+    try { for (const ev of this.det.flush()) this.onSnore(ev); } catch (e) { /* ignore */ }
+    try { await this.finishSamples(); } catch (e) { /* ignore */ }
+    this.ensureMinute(Math.max(0, Math.floor((now - this.base) / 60000)));
+    this.session.end = now;
+    this.releaseAll();
+    await this.persist();
+    return this.session;
+  }
+}
+
+// Microphone test: live level meter for 10 s without starting a session.
+async function runMicTest(ui) {
+  const input = new AudioInput();
+  await input.open();
+  const t0 = Date.now();
+  let peak = -100, stopped = false;
+  const finish = () => {
+    if (stopped) return;
+    stopped = true;
+    clearInterval(timer);
+    input.close();
+    if (ui.onDone) ui.onDone(peak);
+  };
+  const timer = setInterval(() => {
+    const elapsed = Date.now() - t0;
+    let r;
+    try { r = input.read(); } catch (e) { return; }
+    if (r.db > peak) peak = r.db;
+    if (ui.onLevel) ui.onLevel(r.db, Math.max(0, 10 - Math.floor(elapsed / 1000)));
+    if (elapsed >= 10000) finish();
+  }, 100);
+  return { cancel: finish };
+}
+
+// ---- views
+const CLS_LABEL = { quiet: 'Quiet', light: 'Light', loud: 'Loud', epic: 'Epic' };
+const enc = encodeURIComponent;
+const pad = (n) => String(n).padStart(2, '0');
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtClock(ms) { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function fmtClockSec(ms) { const d = new Date(ms); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(s / 3600) + ':' + pad(Math.floor(s / 60) % 60) + ':' + pad(s % 60);
+}
+function fmtDuration(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 60) return m + ' min';
+  return Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min';
+}
+function nightDate(s) {
+  const d = new Date(s.start);
+  if (d.getHours() < 6) d.setDate(d.getDate() - 1); // a 1 am start belongs to the night before
+  return d;
+}
+function fmtNight(s, long) {
+  return nightDate(s).toLocaleDateString(undefined, long
+    ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }
+    : { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function fmtPct(x) { return (Math.round(x * 10) / 10).toFixed(1) + '%'; }
+function fmtMin(sec) { return (sec / 60).toFixed(1); }
+
+function scoreOf(s) {
+  const total = s.end ? (s.end - s.start) / 1000 : (s.minutes || []).length * 60;
+  return computeScore(s.minutes, total);
+}
+function ratingChip(r) { return '<span class="chip rate-' + r.key + '">' + esc(r.label) + '</span>'; }
+function clsChip(cls) { return '<span class="chip cls-chip cls-' + esc(cls) + '">' + esc(CLS_LABEL[cls] || cls) + '</span>'; }
+
+function doneSessions() {
+  return state.sessions.filter((s) => s.end).sort((a, b) => b.start - a.start);
+}
+
+function svgMic() {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+}
+
+function micErrorHtml(msg) {
+  return '<div class="alert" role="alert"><strong>Could not start recording</strong>' + esc(msg.detail) +
+    '<ul><li>Allow the microphone for this site in your browser settings, then try again.</li>' +
+    '<li>Open this page over https. Browsers block the microphone on plain http pages.</li></ul>' +
+    '<div class="btn-row" style="margin-top:10px"><button class="btn" type="button" data-action="dismiss-error">Dismiss</button></div></div>';
+}
+
+function viewHome() {
+  const last = doneSessions()[0];
+  const st = state.settings;
+  const sensLabel = { low: 'Low', medium: 'Medium', high: 'High' }[st.sensitivity];
+  let h = '<header class="page-head"><h1>Snore Tracker</h1><span class="muted small">' +
+    esc(new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })) + '</span></header>';
+  if (state.micError) h += micErrorHtml(state.micError);
+  if (state.notice) h += '<div class="note" role="status" style="margin-bottom:14px">' + esc(state.notice) + '</div>';
+
+  h += '<section class="card" aria-label="Start a night"><button type="button" class="btn-start" data-action="start"' + (state.starting ? ' disabled' : '') + '>' +
+    svgMic() + '<span>' + (state.starting ? 'Starting...' : 'Start recording') + '</span></button>' +
+    '<p class="hint">Sensitivity ' + esc(sensLabel) + '. Audio samples ' + (st.recordSamples ? 'on' : 'off') + '.</p></section>';
+
+  if (last) {
+    const sc = scoreOf(last);
+    h += '<section class="card" aria-labelledby="ln"><div class="card-head"><h2 id="ln">Last night</h2><span class="muted small">' + esc(fmtNight(last)) + '</span></div>' +
+      '<div class="score-row"><div class="score-num">' + sc.score.toFixed(1) + '</div><div class="score-side">' + ratingChip(sc.rating) + '<span class="muted small">Snore Score</span></div></div>' +
+      '<dl class="stats">' +
+      '<div><dt>Snore time</dt><dd>' + fmtPct(sc.snorePct) + '</dd></div>' +
+      '<div><dt>Duration</dt><dd>' + esc(fmtDuration(last.end - last.start)) + '</dd></div>' +
+      '<div><dt>Loud</dt><dd>' + fmtPct(sc.loudPct) + '</dd></div>' +
+      '<div><dt>Epic</dt><dd>' + fmtPct(sc.epicPct) + '</dd></div></dl>' +
+      '<a class="btn" href="#/night/' + enc(last.id) + '">See the full night</a></section>';
+  } else {
+    h += '<section class="card" aria-labelledby="fn"><h2 id="fn">Your first night</h2>' +
+      '<p class="muted">Record one night and this space fills with your results. Here is what you will get:</p>' +
+      ghostSvg() +
+      '<ol class="steps muted"><li>A Snore Score from 0 to 100, with a rating.</li><li>A timeline showing when you snored and how loudly.</li>' +
+      '<li>Short audio clips of your loudest snores.</li><li>Notes on what you tried, such as nasal strips or side sleeping.</li></ol></section>';
+  }
+
+  h += '<section class="card" aria-labelledby="cl"><h2 id="cl">Before you sleep</h2><ul class="check">' +
+    '<li><label><input type="checkbox"><span>Plug in your charger. A night of recording uses battery.</span></label></li>' +
+    '<li><label><input type="checkbox"><span>Place the phone within 1 m of your head, mic uncovered.</span></label></li>' +
+    '<li><label><input type="checkbox"><span>Leave the screen on. It dims and stays awake on its own.</span></label></li></ul></section>';
+  return h;
+}
+
+function ghostSvg() {
+  const hs = [10, 16, 8, 30, 44, 26, 12, 36, 52, 40, 18, 9, 24, 34, 14, 8];
+  let bars = '';
+  hs.forEach((v, i) => {
+    const cls = v > 44 ? 'var(--c-epic)' : v > 28 ? 'var(--c-loud)' : v > 14 ? 'var(--c-light)' : 'var(--c-quiet)';
+    bars += '<rect x="' + (8 + i * 18) + '" y="' + (70 - v) + '" width="13" height="' + v + '" rx="2" fill="none" stroke="' + cls + '"/>';
+  });
+  return '<svg class="ghost" viewBox="0 0 300 92" role="img" aria-label="Example layout of the night timeline, not your data">' + bars +
+    '<line x1="4" y1="71" x2="296" y2="71" stroke="var(--chart-grid)"/>' +
+    '<text x="8" y="86" font-size="9" fill="var(--text-faint)">22:00</text><text x="140" y="86" font-size="9" fill="var(--text-faint)">02:00</text>' +
+    '<text x="262" y="86" font-size="9" fill="var(--text-faint)">06:00</text></svg>';
+}
+
+// ---- history
+function viewHistory() {
+  const list = doneSessions();
+  let h = '<header class="page-head"><h1>History</h1><span class="muted small">' + list.length + (list.length === 1 ? ' night' : ' nights') + '</span></header>';
+  if (!list.length) {
+    h += '<section class="card"><h2>No nights yet</h2><p class="muted">Your nights appear here after your first recording. You will see a score trend and which habits go with quieter nights.</p><a class="btn btn-primary" href="#/">Go to Home</a></section>';
+  } else {
+    h += '<section class="card" aria-labelledby="tr"><div class="card-head"><h2 id="tr">Score trend</h2><span class="muted small">Last 30 nights</span></div>';
+    if (list.length < 2) h += '<p class="muted">Record a second night to see a trend line.</p>';
+    else h += '<div class="chart short"><canvas id="trend" role="img" tabindex="0" aria-label="Line chart of Snore Score for each of the last nights"></canvas><div class="tip" id="trendTip" hidden></div></div>';
+    h += '</section>';
+
+    h += '<section class="card" aria-labelledby="ins"><h2 id="ins">Insights</h2>' + insightsHtml(list) + '</section>';
+
+    const maxScore = Math.max(50, ...list.map((s) => scoreOf(s).score));
+    h += '<section class="card" aria-labelledby="all"><h2 id="all">All nights</h2><ul class="list">';
+    for (const s of list) {
+      const sc = scoreOf(s);
+      h += '<li><a class="row" href="#/night/' + enc(s.id) + '"><div><div class="title">' + esc(fmtNight(s)) + '</div><div class="meta">' +
+        esc(fmtClock(s.start)) + ' to ' + esc(fmtClock(s.end)) + ' &middot; ' + esc(fmtDuration(s.end - s.start)) + '</div></div>' +
+        '<div class="right"><span class="big">' + sc.score.toFixed(1) + '</span>' + ratingChip(sc.rating) + '</div>' +
+        '<div class="minibar" role="img" aria-label="Score ' + sc.score.toFixed(1) + ' of ' + maxScore.toFixed(0) + '"><i style="width:' + Math.max(1, Math.min(100, sc.score / maxScore * 100)).toFixed(1) + '%"></i></div></a></li>';
+    }
+    h += '</ul></section>';
+  }
+  h += '<section class="card" aria-labelledby="dt"><h2 id="dt">Your data</h2><p class="muted">Exports hold the minute-by-minute data and notes. They leave out audio. Import adds nights you do not have yet.</p>' +
+    '<div class="btn-row"><button class="btn" type="button" data-action="export-all">Export all data</button>' +
+    '<button class="btn" type="button" data-action="import">Import a file</button>' +
+    '<input id="importFile" type="file" accept="application/json,.json" hidden></div></section>';
+  return h;
+}
+
+function computeInsights(sessions) {
+  const done = sessions.filter((s) => s.end);
+  const scores = new Map(done.map((s) => [s.id, scoreOf(s).score]));
+  const out = [];
+  const consider = (kind, field, names) => {
+    for (const name of names) {
+      const withS = done.filter((s) => (s[field] || []).indexOf(name) >= 0);
+      const withoutS = done.filter((s) => (s[field] || []).indexOf(name) < 0);
+      if (withS.length < 2 || withoutS.length < 2) continue;
+      const avg = (arr) => arr.reduce((a, s) => a + scores.get(s.id), 0) / arr.length;
+      const a = avg(withS), b = avg(withoutS);
+      out.push({ kind, name, withN: withS.length, withoutN: withoutS.length, withAvg: a, withoutAvg: b, diff: a - b });
+    }
+  };
+  const names = (field, builtin, custom) => {
+    const set = new Set(builtin.concat(custom));
+    done.forEach((s) => (s[field] || []).forEach((n) => set.add(n)));
+    return Array.from(set);
+  };
+  consider('Factor', 'factors', names('factors', BUILTIN_FACTORS, state.settings.customFactors));
+  consider('Remedy', 'remedies', names('remedies', BUILTIN_REMEDIES, state.settings.customRemedies));
+  out.sort((x, y) => Math.abs(y.diff) - Math.abs(x.diff));
+  return out;
+}
+function insightsHtml(list) {
+  const items = computeInsights(list);
+  let h = '';
+  if (!items.length) {
+    h += '<p class="muted">Insights appear once a factor or remedy is tagged on at least 2 nights, with at least 2 other nights without it. Tag them on each night\'s results page.</p>';
+  } else {
+    h += '<ul class="list">';
+    for (const it of items) {
+      const sign = it.diff > 0 ? '+' : it.diff < 0 ? '' : '';
+      const cls = it.diff > 0.05 ? 'up' : it.diff < -0.05 ? 'down' : '';
+      h += '<li class="row"><div><div class="title">' + esc(it.name) + '<span class="kind">' + it.kind + '</span></div>' +
+        '<div class="meta">With: ' + it.withAvg.toFixed(1) + ' (' + it.withN + ' nights). Without: ' + it.withoutAvg.toFixed(1) + ' (' + it.withoutN + ' nights).</div></div>' +
+        '<div class="right"><span class="delta ' + cls + '">' + sign + it.diff.toFixed(1) + '</span></div></li>';
+    }
+    h += '</ul><p class="small faint" style="margin-top:10px">Lower scores are quieter. These are correlations from a small sample. They do not prove a cause.</p>';
+  }
+  return h;
+}
+
+// ---- night results
+function tagNames(kind) {
+  const builtin = kind === 'factor' ? BUILTIN_FACTORS : BUILTIN_REMEDIES;
+  const custom = kind === 'factor' ? state.settings.customFactors : state.settings.customRemedies;
+  return builtin.concat(custom);
+}
+function tagGroupHtml(kind, s) {
+  const field = kind === 'factor' ? 'factors' : 'remedies';
+  const sel = s[field] || [];
+  const names = tagNames(kind);
+  sel.forEach((n) => { if (names.indexOf(n) < 0) names.push(n); });
+  return '<div class="tag-grid">' + names.map((n) =>
+    '<button type="button" class="tag" data-action="toggle-tag" data-kind="' + kind + '" data-name="' + esc(n) + '" aria-pressed="' + (sel.indexOf(n) >= 0) + '">' + esc(n) + '</button>').join('') + '</div>';
+}
+function tagsSectionHtml(s) {
+  return '<section class="card" aria-labelledby="fa"><h2 id="fa">Factors</h2><p class="muted small">What might have changed tonight? Tap to switch on.</p>' + tagGroupHtml('factor', s) +
+    '<div class="add-row"><input type="text" id="addFactor" maxlength="30" placeholder="Add your own factor" aria-label="Add your own factor"><button type="button" class="btn" data-action="add-tag" data-kind="factor">Add</button></div></section>' +
+    '<section class="card" aria-labelledby="re"><h2 id="re">Remedies</h2><p class="muted small">What did you try?</p>' + tagGroupHtml('remedy', s) +
+    '<div class="add-row"><input type="text" id="addRemedy" maxlength="30" placeholder="Add your own remedy" aria-label="Add your own remedy"><button type="button" class="btn" data-action="add-tag" data-kind="remedy">Add</button></div></section>';
+}
+function sampleNoteText(s) {
+  if (s.sampleNote === 'unsupported') return 'This browser cannot record audio clips (MediaRecorder is not supported), so no samples were saved. Scores and the timeline are not affected.';
+  if (s.sampleNote === 'off') return 'Audio samples were switched off for this night.';
+  if (s.sampleNote === 'error') return 'Audio sample recording stopped because of an error. Scores and the timeline are not affected.';
+  return 'No clips were saved. Clips are kept when a light or louder snore is heard.';
+}
+function samplesHtml(s) {
+  const list = (s.samplesMeta || []).slice().sort((a, b) => a.t - b.t);
+  if (!list.length) return '<p class="muted" id="sampleEmpty">' + esc(sampleNoteText(s)) + '</p>';
+  return '<ul class="list" id="sampleList">' + list.map((m) =>
+    '<li class="sample" data-sid="' + esc(m.id) + '"><span class="t">' + esc(fmtClock(m.t)) + '</span>' +
+    '<span class="d">' + clsChip(m.cls) + ' &nbsp;' + Math.round((m.durationMs || 0) / 1000) + ' s</span>' +
+    '<button type="button" class="btn icon-btn" data-action="play" data-id="' + esc(m.id) + '" aria-label="Play clip from ' + esc(fmtClock(m.t)) + '">Play</button>' +
+    '<button type="button" class="btn btn-danger icon-btn" data-action="del-sample" data-id="' + esc(m.id) + '" aria-label="Delete clip from ' + esc(fmtClock(m.t)) + '">Delete</button></li>').join('') + '</ul>';
+}
+
+function viewNight(id) {
+  const s = state.sessions.find((x) => x.id === id);
+  if (!s) {
+    return '<a class="back" href="#/history">&larr; History</a><section class="card"><h2>Night not found</h2><p class="muted">It may have been deleted.</p><a class="btn" href="#/history">Back to History</a></section>';
+  }
+  const sc = scoreOf(s);
+  let h = '<a class="back" href="#/history">&larr; History</a>' +
+    '<header class="page-head" style="margin-top:0"><h1>' + esc(fmtNight(s, true)) + '</h1></header>';
+  h += '<section class="card" aria-label="Summary"><div class="score-row"><div class="score-num">' + sc.score.toFixed(1) + '</div><div class="score-side">' + ratingChip(sc.rating) +
+    '<span class="muted small">Snore Score</span></div></div>' +
+    '<dl class="stats"><div><dt>Snore time</dt><dd>' + fmtPct(sc.snorePct) + '</dd></div>' +
+    '<div><dt>Duration</dt><dd>' + esc(fmtDuration(s.end - s.start)) + '</dd></div>' +
+    '<div><dt>Loud</dt><dd>' + fmtPct(sc.loudPct) + ' <small>of night</small></dd></div>' +
+    '<div><dt>Epic</dt><dd>' + fmtPct(sc.epicPct) + ' <small>of night</small></dd></div></dl>' +
+    '<p class="muted small" style="margin:0">Bedtime ' + esc(fmtClock(s.start)) + ', stopped ' + esc(fmtClock(s.end)) + '.</p></section>';
+
+  h += '<section class="card" aria-labelledby="tl"><h2 id="tl">Timeline</h2><div class="chart"><canvas id="tl-canvas" role="img" tabindex="0" aria-label="' + esc(timelineAria(s)) + '"></canvas><div class="tip" id="tlTip" hidden></div></div>' +
+    '<ul class="legend" aria-label="Legend">' + CLASS_KEYS.map((k) => '<li class="cls-' + k + '"><i></i>' + CLS_LABEL[k] + '</li>').join('') + '</ul>' +
+    '<p class="small faint" style="margin:8px 0 0">Each bar is 5 minutes. Tap or hover a bar for details.</p></section>';
+
+  h += '<section class="card" aria-labelledby="ib"><h2 id="ib">Intensity breakdown</h2><div class="tiles">' +
+    CLASS_KEYS.map((k) => '<div class="tile cls-' + k + '"><b>' + fmtMin(sc[k + 'Sec']) + ' min</b><span>' + CLS_LABEL[k] + '</span></div>').join('') + '</div></section>';
+
+  h += '<details class="card"><summary>How the score works</summary>' +
+    '<p>Each second of snoring earns points by loudness: quiet 1, light 2, loud 3, epic 4.</p>' +
+    '<p class="formula">Snore Score = 100 &times; (1&times;quiet + 2&times;light + 3&times;loud + 4&times;epic seconds) &divide; (4 &times; total seconds), rounded to 1 decimal.</p>' +
+    '<p>Snore time % = snoring seconds &divide; total seconds. A score of 100 would mean epic snoring all night.</p>' +
+    '<p>Ratings: 0 to 10 quiet, 10 to 25 mild, 25 to 50 moderate, over 50 severe. These ranges are our own labels, not medical categories.</p>' +
+    '<p class="small faint" style="margin:0">This app does not diagnose sleep apnea. If you gasp or stop breathing in your sleep, or feel worn out by day, talk to a doctor.</p></details>';
+
+  h += '<section class="card" aria-labelledby="sm"><h2 id="sm">Audio samples</h2><div id="samples">' + samplesHtml(s) + '</div></section>';
+  h += '<div id="tags">' + tagsSectionHtml(s) + '</div>';
+  h += '<section class="card" aria-labelledby="nt"><div class="card-head"><h2 id="nt">Notes</h2><span class="small faint" id="saveState" role="status"></span></div>' +
+    '<textarea id="notes" maxlength="2000" placeholder="Anything to remember about this night?" aria-labelledby="nt">' + esc(s.notes || '') + '</textarea></section>';
+  h += '<section class="card"><div class="btn-row" id="nightActions"><button type="button" class="btn" data-action="export-night">Export this night</button>' +
+    '<button type="button" class="btn btn-danger" data-action="arm-delete-night">Delete night</button></div></section>';
+  return h;
+}
+
+// ---- settings
+function viewSettings() {
+  const st = state.settings;
+  const radio = (v, label) => '<label><input type="radio" name="sens" data-field="sensitivity" value="' + v + '"' + (st.sensitivity === v ? ' checked' : '') + '><span>' + label + '</span></label>';
+  const customs = [].concat(st.customFactors.map((n) => ['factor', n]), st.customRemedies.map((n) => ['remedy', n]));
+  let h = '<header class="page-head"><h1>Settings</h1></header>';
+  h += '<fieldset class="card"><legend>Sensitivity</legend><div class="seg" role="radiogroup" aria-label="Sensitivity">' +
+    radio('low', 'Low') + radio('medium', 'Medium') + radio('high', 'High') + '</div>' +
+    '<p class="muted small" style="margin:10px 0 0">Low hears only clear snores (15 dB above the room noise). High also hears soft ones (6 dB). Use Low if a fan or traffic causes false alarms.</p></fieldset>';
+  h += '<section class="card" aria-label="Audio samples"><h2>Audio samples</h2>' +
+    '<div class="field"><label class="lbl" for="recordSamples">Record samples<span class="sub">Keep short clips of your loudest snores.</span></label>' +
+    '<span class="switch"><input type="checkbox" role="switch" id="recordSamples" data-field="recordSamples"' + (st.recordSamples ? ' checked' : '') + '><i></i></span></div>' +
+    '<div class="field"><label class="lbl" for="maxSamples">Samples per night<span class="sub">Loudest kept, with coverage each hour.</span></label>' +
+    '<span style="display:flex;align-items:center;gap:8px"><input type="range" id="maxSamples" data-field="maxSamples" min="5" max="50" step="1" value="' + st.maxSamples + '"><output class="out" id="maxSamplesOut" for="maxSamples">' + st.maxSamples + '</output></span></div></section>';
+  h += '<section class="card" aria-label="Recording"><h2>Recording</h2>' +
+    '<div class="field"><label class="lbl" for="autoStop">Auto-stop<span class="sub">Ends the night after this long.</span></label>' +
+    '<select id="autoStop" data-field="autoStopHours">' + [0, 6, 8, 10, 12].map((v) => '<option value="' + v + '"' + (st.autoStopHours === v ? ' selected' : '') + '>' + (v ? v + ' hours' : 'Off') + '</option>').join('') + '</select></div>' +
+    '<div class="field"><label class="lbl" for="clockOpacity">Screen brightness<span class="sub">How bright the clock looks in sleep mode.</span></label>' +
+    '<span style="display:flex;align-items:center;gap:8px"><input type="range" id="clockOpacity" data-field="clockOpacity" min="5" max="60" step="1" value="' + Math.round(st.clockOpacity * 100) + '"><output class="out" id="clockOut" for="clockOpacity">' + Math.round(st.clockOpacity * 100) + '%</output></span></div>' +
+    '<div class="preview" aria-hidden="true"><b id="clockPrev" style="opacity:' + st.clockOpacity + '">' + esc(fmtClock(Date.now())) + '</b></div></section>';
+  h += '<section class="card" aria-labelledby="tm"><h2 id="tm">Test microphone</h2><p class="muted">Watch the meter for 10 seconds without starting a night. Say something or clap.</p>' +
+    '<div class="meter" role="img" aria-label="Microphone level"><i id="micBar"></i></div>' +
+    '<p class="small muted" id="micText" role="status" style="margin:8px 0 12px">Not running.</p>' +
+    '<button type="button" class="btn" id="micBtn" data-action="test-mic">Test microphone</button></section>';
+  if (customs.length) {
+    h += '<section class="card" aria-labelledby="cu"><h2 id="cu">Your custom factors and remedies</h2><ul class="list">' + customs.map((c) =>
+      '<li class="row"><div><span class="title">' + esc(c[1]) + '</span><span class="kind">' + (c[0] === 'factor' ? 'Factor' : 'Remedy') + '</span></div>' +
+      '<div class="right"><button type="button" class="btn icon-btn" data-action="remove-custom" data-kind="' + c[0] + '" data-name="' + esc(c[1]) + '" aria-label="Remove ' + esc(c[1]) + '">Remove</button></div></li>').join('') + '</ul></section>';
+  }
+  h += '<section class="card" aria-labelledby="da"><h2 id="da">Data and storage</h2><p class="muted">Everything stays in this browser. Nothing is uploaded. <span id="storageInfo"></span></p>' +
+    '<div id="deleteAllHost"><button type="button" class="btn btn-danger" data-action="arm-delete-all">Delete all data</button></div></section>';
+  return h;
+}
+
+// ---- charts
+function theme() {
+  const cs = getComputedStyle(document.documentElement);
+  const g = (n) => cs.getPropertyValue(n).trim();
+  return {
+    text: g('--chart-text') || '#a4acd0',
+    grid: g('--chart-grid') || 'rgba(160,170,210,.2)',
+    line: g('--chart-line') || g('--accent'),
+    accent: g('--accent'),
+    surface: g('--surface'),
+    strong: g('--text'),
+    classes: [g('--c-quiet'), g('--c-light'), g('--c-loud'), g('--c-epic')],
+    font: getComputedStyle(document.body).fontFamily || 'sans-serif'
+  };
+}
+function fitCanvas(canvas) {
+  const r = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(120, Math.round(r.width));
+  const h = Math.max(120, Math.round(r.height));
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
+// Night timeline: 5 minute bars stacked by intensity class.
+const BIN_MS = 300000;
+function timelineModel(s) {
+  const origin = s.start;
+  const lastMin = s.minutes.length ? s.minutes[s.minutes.length - 1].t + 60000 : s.start + 60000;
+  const endMs = Math.max(s.end || lastMin, origin + 60000);
+  const total = endMs - origin;
+  const nb = Math.max(1, Math.ceil(total / BIN_MS));
+  const bins = [];
+  for (let i = 0; i < nb; i++) bins.push({ t0: origin + i * BIN_MS, t1: Math.min(endMs, origin + (i + 1) * BIN_MS), v: [0, 0, 0, 0] });
+  for (const m of s.minutes) {
+    const i = Math.min(nb - 1, Math.max(0, Math.floor((m.t + 30000 - origin) / BIN_MS)));
+    CLASS_KEYS.forEach((k, j) => { bins[i].v[j] += (m[k + 'Sec'] || 0) / 60; });
+  }
+  let maxStack = 0;
+  bins.forEach((b) => { b.sum = b.v[0] + b.v[1] + b.v[2] + b.v[3]; if (b.sum > maxStack) maxStack = b.sum; });
+  const yMax = Math.min(5, Math.max(1, Math.ceil(maxStack)));
+  return { origin, endMs, total, nb, bins, yMax, maxStack };
+}
+function timelineAria(s) {
+  const m = timelineModel(s);
+  const sc = scoreOf(s);
+  return 'Timeline of snoring from ' + fmtClock(s.start) + ' to ' + fmtClock(m.endMs) + ', in 5 minute bars. ' + fmtMin(sc.snoreSec) + ' minutes of snoring in total. Busiest bar: ' + m.maxStack.toFixed(1) + ' minutes.';
+}
+const TL = { L: 46, R: 10, T: 12, B: 28 };
+function drawTimeline(canvas, m, hover) {
+  const { ctx, w, h } = fitCanvas(canvas);
+  const th = theme();
+  const pw = w - TL.L - TL.R, ph = h - TL.T - TL.B;
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = '11px ' + th.font;
+  ctx.lineWidth = 1;
+  // y axis: minutes of snoring per bar
+  const step = m.yMax <= 2 ? 0.5 : 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= m.yMax + 1e-9; v += step) {
+    const y = Math.round(TL.T + ph - (v / m.yMax) * ph) + 0.5;
+    ctx.strokeStyle = th.grid;
+    ctx.beginPath(); ctx.moveTo(TL.L, y); ctx.lineTo(TL.L + pw, y); ctx.stroke();
+    ctx.fillStyle = th.text;
+    ctx.fillText(step < 1 ? v.toFixed(1) : String(v), TL.L - 6, y);
+  }
+  ctx.save();
+  ctx.translate(11, TL.T + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = th.text;
+  ctx.fillText('Minutes snoring per bar', 0, 0);
+  ctx.restore();
+  // bars
+  const bw = pw / m.nb;
+  const gap = bw > 5 ? 1.5 : bw > 2.5 ? 1 : 0;
+  m.bins.forEach((b, i) => {
+    const x = TL.L + ((b.t0 - m.origin) / m.total) * pw;
+    const x2 = TL.L + ((b.t1 - m.origin) / m.total) * pw;
+    let y = TL.T + ph;
+    for (let j = 0; j < 4; j++) {
+      const hh = (Math.min(b.v[j], m.yMax) / m.yMax) * ph;
+      if (hh <= 0) continue;
+      ctx.fillStyle = th.classes[j];
+      ctx.fillRect(x + gap / 2, y - hh, Math.max(1, x2 - x - gap), hh);
+      y -= hh;
+    }
+    if (i === hover) {
+      ctx.strokeStyle = th.strong; ctx.lineWidth = 1.5;
+      ctx.strokeRect(x + 0.5, TL.T + 0.5, Math.max(2, x2 - x - 1), ph - 1);
+      ctx.lineWidth = 1;
+    }
+  });
+  // x axis: hour labels
+  ctx.strokeStyle = th.grid;
+  ctx.beginPath(); ctx.moveTo(TL.L, TL.T + ph + 0.5); ctx.lineTo(TL.L + pw, TL.T + ph + 0.5); ctx.stroke();
+  const hours = m.total / 3600000;
+  const stepH = [1, 2, 3, 4, 6, 12].find((sh) => (sh * 3600000 / m.total) * pw >= 48) || 12;
+  const d = new Date(m.origin); d.setMinutes(0, 0, 0);
+  let t = d.getTime(); while (t < m.origin) t += 3600000;
+  ctx.fillStyle = th.text; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  let lastLabelX = -1e9;
+  for (; t <= m.endMs; t += 3600000) {
+    const hr = new Date(t).getHours();
+    if (hours >= 2 && hr % stepH !== 0 && stepH > 1) continue;
+    const x = TL.L + ((t - m.origin) / m.total) * pw;
+    if (x - lastLabelX < 44) continue;
+    ctx.strokeStyle = th.grid;
+    ctx.beginPath(); ctx.moveTo(Math.round(x) + 0.5, TL.T + ph); ctx.lineTo(Math.round(x) + 0.5, TL.T + ph + 4); ctx.stroke();
+    const label = pad(hr) + ':00';
+    const tw = ctx.measureText(label).width;
+    const lx = Math.min(w - tw / 2 - 2, Math.max(TL.L + tw / 2 - 4, x));
+    ctx.fillText(label, lx, TL.T + ph + 7);
+    lastLabelX = x;
+  }
+  return { bw, pw, ph };
+}
+
+// Score trend: line with points for the last 30 nights.
+function trendModel(list) {
+  const nights = list.slice(0, 30).reverse().map((s) => ({ s, score: scoreOf(s).score }));
+  const maxScore = Math.max(50, ...nights.map((n) => n.score));
+  const yMax = Math.ceil(maxScore / 10) * 10;
+  return { nights, yMax };
+}
+const TR = { L: 36, R: 14, T: 22, B: 28 };
+function drawTrend(canvas, m, hover) {
+  const { ctx, w, h } = fitCanvas(canvas);
+  const th = theme();
+  const pw = w - TR.L - TR.R, ph = h - TR.T - TR.B;
+  ctx.clearRect(0, 0, w, h);
+  ctx.font = '11px ' + th.font; ctx.lineWidth = 1;
+  const yPix = (v) => TR.T + ph - (v / m.yMax) * ph;
+  const n = m.nights.length;
+  const xPix = (i) => TR.L + (n === 1 ? pw / 2 : (i / (n - 1)) * pw);
+  const stepV = m.yMax <= 50 ? 10 : m.yMax <= 100 ? 25 : 50;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let v = 0; v <= m.yMax; v += stepV) {
+    const y = Math.round(yPix(v)) + 0.5;
+    ctx.strokeStyle = th.grid;
+    ctx.beginPath(); ctx.moveTo(TR.L, y); ctx.lineTo(TR.L + pw, y); ctx.stroke();
+    ctx.fillStyle = th.text; ctx.fillText(String(v), TR.L - 6, y);
+  }
+  // rating boundaries, dashed
+  ctx.setLineDash([3, 4]);
+  [[10, 'mild'], [25, 'moderate'], [50, 'severe']].forEach((b) => {
+    if (b[0] > m.yMax) return;
+    const y = Math.round(yPix(b[0])) + 0.5;
+    ctx.strokeStyle = th.text; ctx.globalAlpha = 0.35;
+    ctx.beginPath(); ctx.moveTo(TR.L, y); ctx.lineTo(TR.L + pw, y); ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+  ctx.setLineDash([]);
+  // line
+  ctx.strokeStyle = th.line; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  m.nights.forEach((p, i) => { const x = xPix(i), y = yPix(p.score); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+  ctx.stroke();
+  // points; the last one is emphasised
+  m.nights.forEach((p, i) => {
+    const x = xPix(i), y = yPix(p.score), last = i === n - 1;
+    ctx.fillStyle = last ? th.line : th.surface;
+    ctx.strokeStyle = th.line; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, last ? 6 : 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    if (i === hover && !last) { ctx.lineWidth = 2; ctx.strokeStyle = th.strong; ctx.beginPath(); ctx.arc(x, y, 6.5, 0, Math.PI * 2); ctx.stroke(); }
+  });
+  const lastP = m.nights[n - 1];
+  ctx.fillStyle = th.strong; ctx.font = 'bold 12px ' + th.font; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+  ctx.fillText(lastP.score.toFixed(1), Math.min(w - 2, xPix(n - 1) + 14), yPix(lastP.score) - 9);
+  // x labels: dates
+  ctx.font = '11px ' + th.font; ctx.fillStyle = th.text; ctx.textBaseline = 'top';
+  const want = Math.max(2, Math.min(n, Math.floor(pw / 70)));
+  let lastX = -1e9;
+  for (let k = 0; k < want; k++) {
+    const i = n === 1 ? 0 : Math.round((k / (want - 1)) * (n - 1));
+    const x = xPix(i);
+    if (x - lastX < 56) continue;
+    const label = nightDate(m.nights[i].s).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const tw = ctx.measureText(label).width;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, Math.min(w - tw / 2 - 2, Math.max(tw / 2 + 2, x)), TR.T + ph + 8);
+    lastX = x;
+  }
+  return { xPix, yPix };
+}
+
+// Shared hover/tap/keyboard handling for both charts.
+function wireHover(canvas, tip, spec) {
+  let cur = -1;
+  const set = (i) => {
+    if (i === cur) return;
+    cur = i;
+    spec.redraw(i);
+    if (i < 0) { tip.hidden = true; return; }
+    tip.innerHTML = spec.html(i);
+    tip.hidden = false;
+    const a = spec.anchor(i);
+    const tw = tip.offsetWidth, th = tip.offsetHeight, cw = canvas.getBoundingClientRect().width;
+    tip.style.left = Math.max(0, Math.min(cw - tw, a.x - tw / 2)) + 'px';
+    tip.style.top = Math.max(0, a.y - th - 10) + 'px';
+  };
+  const at = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return spec.indexAt(e.clientX - r.left, e.clientY - r.top);
+  };
+  canvas.addEventListener('pointermove', (e) => set(at(e)));
+  canvas.addEventListener('pointerdown', (e) => set(at(e)));
+  canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') set(-1); });
+  canvas.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const d = e.key === 'ArrowRight' ? 1 : -1;
+      set(Math.max(0, Math.min(spec.count - 1, cur < 0 ? (d > 0 ? 0 : spec.count - 1) : cur + d)));
+    } else if (e.key === 'Escape') set(-1);
+  });
+  canvas.addEventListener('blur', () => set(-1));
+  const outside = (e) => { if (!canvas.isConnected) { document.removeEventListener('pointerdown', outside); return; } if (e.target !== canvas) set(-1); };
+  document.addEventListener('pointerdown', outside);
+}
+
+function mountTimeline(canvas, tip, s) {
+  const m = timelineModel(s);
+  let geo = null, hover = -1;
+  const draw = () => { geo = drawTimeline(canvas, m, hover); };
+  const redraw = (i) => { hover = i; draw(); };
+  draw();
+  state.charts.push(draw);
+  const barX = (i) => { const b = m.bins[i]; return TL.L + (((b.t0 + b.t1) / 2 - m.origin) / m.total) * geo.pw; };
+  wireHover(canvas, tip, {
+    count: m.nb,
+    redraw,
+    indexAt: (x) => {
+      if (x < TL.L || x > TL.L + geo.pw) return -1;
+      const t = m.origin + ((x - TL.L) / geo.pw) * m.total;
+      return Math.max(0, Math.min(m.nb - 1, Math.floor((t - m.origin) / BIN_MS)));
+    },
+    anchor: (i) => ({ x: barX(i), y: TL.T + geo.ph - (Math.min(m.bins[i].sum, m.yMax) / m.yMax) * geo.ph }),
+    html: (i) => {
+      const b = m.bins[i];
+      let h = '<b>' + fmtClock(b.t0) + ' to ' + fmtClock(b.t1) + '</b><br>' + b.sum.toFixed(1) + ' min snoring';
+      CLASS_KEYS.forEach((k, j) => { if (b.v[j] > 0.049) h += '<br>' + CLS_LABEL[k] + ' ' + b.v[j].toFixed(1) + ' min'; });
+      return h;
+    }
+  });
+}
+
+function mountTrend(canvas, tip, list) {
+  const m = trendModel(list);
+  let geo = null, hover = -1;
+  const draw = () => { geo = drawTrend(canvas, m, hover); };
+  draw();
+  state.charts.push(draw);
+  wireHover(canvas, tip, {
+    count: m.nights.length,
+    redraw: (i) => { hover = i; draw(); },
+    indexAt: (x) => {
+      let best = -1, bd = 22;
+      m.nights.forEach((_, i) => { const d = Math.abs(geo.xPix(i) - x); if (d < bd) { bd = d; best = i; } });
+      return best;
+    },
+    anchor: (i) => ({ x: geo.xPix(i), y: geo.yPix(m.nights[i].score) }),
+    html: (i) => {
+      const p = m.nights[i];
+      return '<b>' + esc(fmtNight(p.s)) + '</b><br>Score ' + p.score.toFixed(1) + ' (' + esc(ratingFor(p.score).label) + ')';
+    }
+  });
+}
+
+// ---- app
+const state = {
+  settings: normalizeSettings(null), sessions: [], recorder: null, starting: false,
+  route: { view: 'home', arg: null }, micError: null, notice: '', charts: [], noteTimer: null, micTest: null
+};
+const $ = (id) => document.getElementById(id);
+
+let toastTimer = null;
+function toast(msg, ms) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms || 3800);
+}
+function reportError(msg, e) {
+  try { console.error(msg, e); } catch (x) { /* ignore */ }
+  toast(msg);
+}
+
+// ---- routing and rendering
+function parseRoute() {
+  const parts = (location.hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
+  if (parts[0] === 'history') return { view: 'history', arg: null };
+  if (parts[0] === 'settings') return { view: 'settings', arg: null };
+  if (parts[0] === 'night' && parts[1]) return { view: 'night', arg: decodeURIComponent(parts[1]) };
+  return { view: 'home', arg: null };
+}
+function render(keepScroll) {
+  const r = state.route;
+  state.charts = [];
+  let html;
+  if (r.view === 'history') html = viewHistory();
+  else if (r.view === 'settings') html = viewSettings();
+  else if (r.view === 'night') html = viewNight(r.arg);
+  else html = viewHome();
+  $('main').innerHTML = html;
+  document.querySelectorAll('.tabs a').forEach((a) => {
+    const active = (a.dataset.tab === 'home' && (r.view === 'home')) || (a.dataset.tab === 'history' && (r.view === 'history' || r.view === 'night')) || (a.dataset.tab === 'settings' && r.view === 'settings');
+    if (active) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+  });
+  try {
+    if (r.view === 'night') mountNightView();
+    else if (r.view === 'history') mountHistoryView();
+    else if (r.view === 'settings') mountSettingsView();
+  } catch (e) { reportError('Something went wrong drawing this page.', e); }
+  if (!keepScroll) window.scrollTo(0, 0);
+}
+function onRoute() {
+  flushNote();
+  stopPlayback();
+  stopMicTest();
+  state.route = parseRoute();
+  render(false);
+}
+function go(hash) {
+  if (location.hash === hash) onRoute(); else location.hash = hash;
+}
+function mountNightView() {
+  const s = state.sessions.find((x) => x.id === state.route.arg);
+  if (!s) return;
+  mountTimeline($('tl-canvas'), $('tlTip'), s);
+}
+function mountHistoryView() {
+  const c = $('trend');
+  if (c) mountTrend(c, $('trendTip'), doneSessions());
+}
+function mountSettingsView() {
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then((e) => {
+      const el = $('storageInfo');
+      if (el && e && e.usage != null) el.textContent = 'Using about ' + (e.usage / 1048576).toFixed(1) + ' MB.';
+    }).catch(() => {});
+  }
+}
+let resizeRaf = 0;
+function redrawCharts() {
+  cancelAnimationFrame(resizeRaf);
+  resizeRaf = requestAnimationFrame(() => state.charts.forEach((f) => { try { f(); } catch (e) { /* ignore */ } }));
+}
+
+// ---- helpers: inline confirm, downloads
+function inlineConfirm(trigger, message, label, onYes) {
+  const box = document.createElement('div');
+  box.className = 'confirm';
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'Confirm');
+  box.innerHTML = '<p>' + esc(message) + '</p><div class="btn-row"><button type="button" class="btn btn-danger solid" data-x="yes">' + esc(label) + '</button><button type="button" class="btn" data-x="no">Keep it</button></div>';
+  trigger.hidden = true;
+  trigger.parentNode.insertBefore(box, trigger.nextSibling);
+  const timer = setTimeout(() => cancel(false), 10000);
+  function cancel(focus) {
+    clearTimeout(timer);
+    box.remove();
+    trigger.hidden = false;
+    if (focus) trigger.focus();
+  }
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-x]');
+    if (!b) return;
+    if (b.dataset.x === 'no') cancel(true);
+    else { cancel(false); onYes(); }
+  });
+  box.querySelector('[data-x="no"]').focus();
+}
+function download(filename, obj) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+function dateStamp(ms) { const d = new Date(ms); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function exportSession(s) {
+  const sc = scoreOf(s);
+  return Object.assign({}, s, { score: sc.score, rating: sc.rating.key, snorePct: round1(sc.snorePct) });
+}
+
+// ---- night view actions
+function currentSession() { return state.sessions.find((x) => x.id === state.route.arg); }
+async function saveCurrent() {
+  const s = currentSession();
+  if (!s) return false;
+  return Store.saveSession(s);
+}
+function flushNote() {
+  if (state.noteTimer) {
+    clearTimeout(state.noteTimer);
+    state.noteTimer = null;
+    const s = state.pendingNoteSession;
+    if (s) Store.saveSession(s);
+  }
+}
+function setSaveState(txt) { const el = $('saveState'); if (el) el.textContent = txt; }
+function cleanTag(raw) { return String(raw || '').replace(/\s+/g, ' ').trim().slice(0, 30); }
+
+async function toggleTag(btn) {
+  const s = currentSession();
+  if (!s) return;
+  const field = btn.dataset.kind === 'factor' ? 'factors' : 'remedies';
+  const name = btn.dataset.name;
+  const list = s[field] || (s[field] = []);
+  const i = list.indexOf(name);
+  if (i >= 0) list.splice(i, 1); else list.push(name);
+  btn.setAttribute('aria-pressed', String(i < 0));
+  if (await saveCurrent()) setSaveState('Saved');
+}
+async function addCustomTag(kind) {
+  const s = currentSession();
+  const input = $(kind === 'factor' ? 'addFactor' : 'addRemedy');
+  if (!s || !input) return;
+  const name = cleanTag(input.value);
+  if (!name) { toast('Type a name first.'); return; }
+  const names = tagNames(kind);
+  const exists = names.find((n) => n.toLowerCase() === name.toLowerCase());
+  const useName = exists || name;
+  if (!exists) {
+    (kind === 'factor' ? state.settings.customFactors : state.settings.customRemedies).push(name);
+    await Store.saveSettings(state.settings);
+  }
+  const field = kind === 'factor' ? 'factors' : 'remedies';
+  if (!s[field]) s[field] = [];
+  if (s[field].indexOf(useName) < 0) s[field].push(useName);
+  await saveCurrent();
+  $('tags').innerHTML = tagsSectionHtml(s);
+  const again = $(kind === 'factor' ? 'addFactor' : 'addRemedy');
+  if (again) again.focus();
+  setSaveState('Saved');
+}
+
+// ---- audio playback (one shared <audio> element)
+const playing = { id: null, url: null, btn: null };
+function setPlayBtn(btn, on) {
+  if (!btn) return;
+  btn.textContent = on ? 'Stop' : 'Play';
+}
+function stopPlayback() {
+  const p = $('player');
+  if (p) { try { p.pause(); } catch (e) { /* ignore */ } p.removeAttribute('src'); }
+  if (playing.url) URL.revokeObjectURL(playing.url);
+  setPlayBtn(playing.btn, false);
+  playing.id = null; playing.url = null; playing.btn = null;
+}
+async function playSample(id, btn) {
+  const p = $('player');
+  if (playing.id === id) { stopPlayback(); return; }
+  stopPlayback();
+  const rec = await Store.getSample(id);
+  if (!rec || !rec.blob) { toast('That clip is no longer available.'); return; }
+  playing.url = URL.createObjectURL(rec.blob);
+  playing.id = id; playing.btn = btn;
+  p.src = playing.url;
+  p.onended = () => stopPlayback();
+  try { await p.play(); setPlayBtn(btn, true); }
+  catch (e) { toast('Your browser could not play this clip.'); stopPlayback(); }
+}
+async function deleteSample(id, btn) {
+  const s = currentSession();
+  if (!s) return;
+  if (playing.id === id) stopPlayback();
+  if (!(await Store.deleteSample(id))) return;
+  s.samplesMeta = (s.samplesMeta || []).filter((m) => m.id !== id);
+  await saveCurrent();
+  const host = $('samples');
+  if (host) host.innerHTML = samplesHtml(s);
+  toast('Clip deleted.');
+}
+
+// ---- import
+function sanitizeSession(raw) {
+  if (!raw || typeof raw !== 'object' || raw.id == null) return null;
+  const start = Number(raw.start);
+  if (!isFinite(start) || !Array.isArray(raw.minutes)) return null;
+  const num = (v) => (isFinite(Number(v)) ? Number(v) : 0);
+  const minutes = raw.minutes.filter((m) => m && isFinite(Number(m.t))).map((m) => ({
+    t: Number(m.t), snoreSec: num(m.snoreSec), quietSec: num(m.quietSec), lightSec: num(m.lightSec), loudSec: num(m.loudSec), epicSec: num(m.epicSec),
+    peakDb: num(m.peakDb), floorDb: m.floorDb == null ? null : num(m.floorDb)
+  }));
+  const strs = (a) => (Array.isArray(a) ? a.map(cleanTag).filter(Boolean) : []);
+  const end = isFinite(Number(raw.end)) && raw.end ? Number(raw.end) : start + minutes.length * 60000;
+  return {
+    id: String(raw.id), start, end, minutes, samplesMeta: [], factors: strs(raw.factors), remedies: strs(raw.remedies),
+    notes: typeof raw.notes === 'string' ? raw.notes.slice(0, 2000) : '', sensitivity: raw.sensitivity || 'medium',
+    sampleNote: 'imported', lastSave: end
+  };
+}
+async function importFile(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch (e) { toast('That file is not valid JSON.'); return; }
+  const list = Array.isArray(data) ? data : Array.isArray(data.sessions) ? data.sessions : data.session ? [data.session] : [];
+  const have = new Set(state.sessions.map((s) => s.id));
+  let added = 0, skipped = 0, bad = 0;
+  for (const raw of list) {
+    const s = sanitizeSession(raw);
+    if (!s) { bad++; continue; }
+    if (have.has(s.id)) { skipped++; continue; }
+    if (await Store.saveSession(s)) { state.sessions.push(s); have.add(s.id); added++; }
+  }
+  const st = state.settings;
+  const addTags = (arr, builtin, custom) => arr.forEach((n) => { if (builtin.indexOf(n) < 0 && custom.indexOf(n) < 0) custom.push(n); });
+  const src = data && data.settings ? data.settings : {};
+  const strs = (a) => (Array.isArray(a) ? a.map(cleanTag).filter(Boolean) : []);
+  addTags(strs(src.customFactors), BUILTIN_FACTORS, st.customFactors);
+  addTags(strs(src.customRemedies), BUILTIN_REMEDIES, st.customRemedies);
+  state.sessions.forEach((s) => { addTags(s.factors || [], BUILTIN_FACTORS, st.customFactors); addTags(s.remedies || [], BUILTIN_REMEDIES, st.customRemedies); });
+  await Store.saveSettings(st);
+  if (!list.length) toast('No nights found in that file.');
+  else toast('Imported ' + added + (added === 1 ? ' night' : ' nights') + '. ' + skipped + ' already here' + (bad ? ', ' + bad + ' skipped as invalid.' : '.'), 5000);
+  render(true);
+}
+
+// ---- recording flow and sleep mode
+function micErrorFor(e) {
+  const n = e && e.name;
+  let detail;
+  if (n === 'InsecureContext') detail = 'Browsers only allow microphone access on pages opened over https.';
+  else if (n === 'NotAllowedError' || n === 'SecurityError') detail = 'The microphone is blocked for this site.';
+  else if (n === 'NotFoundError' || n === 'OverconstrainedError') detail = 'No microphone was found on this device.';
+  else if (n === 'NotReadableError' || n === 'AbortError') detail = 'Another app may be using the microphone.';
+  else detail = (e && e.message) ? e.message : 'The microphone did not start.';
+  return { detail };
+}
+function beforeUnload(e) { if (state.recorder) { e.preventDefault(); e.returnValue = ''; return ''; } }
+
+async function startRecording() {
+  if (state.recorder || state.starting) return;
+  state.starting = true; state.micError = null; state.notice = '';
+  if (state.route.view === 'home') render(true);
+  const rec = new NightRecorder(state.settings, { onTick: sleepTick, onWake: (ok) => { const w = $('sWarn'); if (w) w.hidden = ok; }, onAutoStop: () => stopRecording() });
+  try {
+    await rec.start();
+  } catch (e) {
+    state.starting = false;
+    state.micError = micErrorFor(e);
+    go('#/');
+    render(true);
+    return;
+  }
+  state.starting = false;
+  state.recorder = rec;
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  window.addEventListener('beforeunload', beforeUnload);
+  showSleep();
+}
+async function stopRecording() {
+  const rec = state.recorder;
+  if (!rec) return;
+  state.recorder = null;
+  window.removeEventListener('beforeunload', beforeUnload);
+  hideSleep();
+  toast('Saving your night...');
+  let s = null;
+  try { s = await rec.stop(); } catch (e) { reportError('Could not finish the recording.', e); }
+  if (!s) { render(true); return; }
+  if (s.end - s.start < 60000) {
+    await Store.deleteSession(s.id);
+    state.notice = 'That recording was under a minute, so it was not saved.';
+    go('#/');
+    return;
+  }
+  state.sessions = state.sessions.filter((x) => x.id !== s.id).concat([s]);
+  go('#/night/' + enc(s.id));
+}
+
+const sleep = { op: 0.25, ctrlTimer: null, lastMin: -1, lastSec: -1, start: 0, clockTimer: null };
+function showSleep() {
+  const el = $('sleep');
+  sleep.op = state.settings.clockOpacity;
+  el.style.setProperty('--op', sleep.op);
+  el.hidden = false;
+  el.classList.remove('show');
+  sleep.start = state.recorder.startMs;
+  sleep.lastMin = -1; sleep.lastSec = -1;
+  $('sCount').textContent = '0';
+  $('sLevel').style.transform = 'scaleX(0)';
+  updateClock();
+  sleep.clockTimer = setInterval(updateClock, 1000);
+  document.body.style.overflow = 'hidden';
+  revealControls();
+}
+function hideSleep() {
+  clearInterval(sleep.clockTimer);
+  clearTimeout(sleep.ctrlTimer);
+  $('sleep').hidden = true;
+  document.body.style.overflow = '';
+}
+function updateClock() {
+  const now = Date.now();
+  const mkey = Math.floor(now / 60000);
+  if (mkey !== sleep.lastMin) { sleep.lastMin = mkey; $('sClock').textContent = fmtClock(now); }
+  $('sElapsed').textContent = fmtElapsed(now - sleep.start);
+}
+function sleepTick(info) {
+  const pct = Math.max(0, Math.min(1, (info.db + 80) / 70));
+  $('sLevel').style.transform = 'scaleX(' + pct.toFixed(3) + ')';
+  const c = $('sCount');
+  const v = String(info.count);
+  if (c.textContent !== v) c.textContent = v;
+}
+function revealControls() {
+  const el = $('sleep');
+  el.classList.add('show');
+  clearTimeout(sleep.ctrlTimer);
+  sleep.ctrlTimer = setTimeout(() => { if (!holding) el.classList.remove('show'); }, 5000);
+}
+let holding = false;
+function setupHold() {
+  const btn = $('holdStop');
+  const fill = btn.querySelector('.fill');
+  let t0 = 0, raf = 0, done = 0;
+  const frame = () => { fill.style.transform = 'scaleX(' + Math.min(1, (performance.now() - t0) / 1500).toFixed(3) + ')'; raf = requestAnimationFrame(frame); };
+  const begin = () => {
+    if (holding) return;
+    holding = true; t0 = performance.now();
+    clearTimeout(sleep.ctrlTimer);
+    raf = requestAnimationFrame(frame);
+    done = setTimeout(() => { end(); stopRecording(); }, 1500);
+  };
+  const end = () => {
+    if (!holding) return;
+    holding = false;
+    clearTimeout(done); cancelAnimationFrame(raf);
+    fill.style.transform = 'scaleX(0)';
+    revealControls();
+  };
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); try { btn.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ } begin(); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((n) => btn.addEventListener(n, end));
+  btn.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); begin(); } });
+  btn.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') end(); });
+  btn.addEventListener('blur', end);
+  btn.addEventListener('contextmenu', (e) => e.preventDefault());
+  $('sleep').addEventListener('pointerdown', revealControls);
+}
+
+// ---- crash recovery
+async function recoverSessions() {
+  let n = 0;
+  for (const s of state.sessions.slice()) {
+    if (s.end || (state.recorder && state.recorder.session && state.recorder.session.id === s.id)) continue;
+    const lastMinute = s.minutes.length ? s.minutes[s.minutes.length - 1].t + 60000 : s.start;
+    s.end = Math.max(s.start, Math.min(s.lastSave || lastMinute, lastMinute));
+    if (s.end - s.start < 60000) {
+      await Store.deleteSession(s.id);
+      state.sessions = state.sessions.filter((x) => x.id !== s.id);
+      continue;
+    }
+    const recs = await Store.samplesFor(s.id);
+    s.samplesMeta = recs.map((r) => { const m = Object.assign({}, r); delete m.blob; return m; });
+    await Store.saveSession(s);
+    n++;
+  }
+  if (n) state.notice = 'An earlier recording stopped unexpectedly. We saved the part we had.';
+}
+
+// ---- events
+function onMainClick(e) {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const a = el.dataset.action;
+  if (a === 'start') startRecording();
+  else if (a === 'dismiss-error') { state.micError = null; render(true); }
+  else if (a === 'toggle-tag') toggleTag(el);
+  else if (a === 'add-tag') addCustomTag(el.dataset.kind);
+  else if (a === 'play') playSample(el.dataset.id, el);
+  else if (a === 'del-sample') deleteSample(el.dataset.id, el);
+  else if (a === 'export-night') {
+    const s = currentSession();
+    if (s) download('snore-night-' + dateStamp(nightDate(s).getTime()) + '.json', { app: 'snore-tracker', version: 1, exportedAt: new Date().toISOString(), session: exportSession(s) });
+  } else if (a === 'arm-delete-night') {
+    inlineConfirm(el, 'Delete this night and its audio clips? You cannot undo this.', 'Delete night', async () => {
+      const s = currentSession();
+      if (!s) return;
+      stopPlayback();
+      if (await Store.deleteSession(s.id)) {
+        state.sessions = state.sessions.filter((x) => x.id !== s.id);
+        toast('Night deleted.');
+        go('#/history');
+      }
+    });
+  } else if (a === 'export-all') {
+    download('snore-tracker-export-' + dateStamp(Date.now()) + '.json', {
+      app: 'snore-tracker', version: 1, exportedAt: new Date().toISOString(),
+      settings: { customFactors: state.settings.customFactors, customRemedies: state.settings.customRemedies },
+      sessions: doneSessions().map(exportSession)
+    });
+  } else if (a === 'import') { const f = $('importFile'); if (f) f.click(); }
+  else if (a === 'test-mic') toggleMicTest();
+  else if (a === 'remove-custom') {
+    const list = el.dataset.kind === 'factor' ? state.settings.customFactors : state.settings.customRemedies;
+    const i = list.indexOf(el.dataset.name);
+    if (i >= 0) { list.splice(i, 1); Store.saveSettings(state.settings); render(true); }
+  } else if (a === 'arm-delete-all') {
+    inlineConfirm(el, 'Delete every night, audio clip and setting stored in this browser? You cannot undo this.', 'Delete everything', async () => {
+      stopPlayback();
+      if (await Store.clearAll()) {
+        state.sessions = [];
+        state.settings = normalizeSettings(null);
+        await Store.saveSettings(state.settings);
+        toast('All data deleted.');
+        render(true);
+      }
+    });
+  }
+}
+function onMainInput(e) {
+  const t = e.target;
+  if (t.id === 'notes') {
+    const s = currentSession();
+    if (!s) return;
+    s.notes = t.value;
+    state.pendingNoteSession = s;
+    setSaveState('Saving...');
+    clearTimeout(state.noteTimer);
+    state.noteTimer = setTimeout(async () => { state.noteTimer = null; if (await Store.saveSession(s)) setSaveState('Saved'); }, 400);
+    return;
+  }
+  if (t.dataset && t.dataset.field === 'maxSamples') { $('maxSamplesOut').textContent = t.value; }
+  if (t.dataset && t.dataset.field === 'clockOpacity') { $('clockOut').textContent = t.value + '%'; $('clockPrev').style.opacity = String(t.value / 100); }
+}
+async function onMainChange(e) {
+  const t = e.target;
+  if (t.id === 'importFile') {
+    const f = t.files && t.files[0];
+    if (f) await importFile(f);
+    t.value = '';
+    return;
+  }
+  const f = t.dataset && t.dataset.field;
+  if (!f) return;
+  const st = state.settings;
+  if (f === 'sensitivity') st.sensitivity = t.value;
+  else if (f === 'recordSamples') st.recordSamples = t.checked;
+  else if (f === 'maxSamples') st.maxSamples = Math.round(clampNum(t.value, 5, 50, 20));
+  else if (f === 'autoStopHours') st.autoStopHours = Number(t.value);
+  else if (f === 'clockOpacity') st.clockOpacity = clampNum(Number(t.value) / 100, 0.05, 0.6, 0.25);
+  await Store.saveSettings(st);
+}
+
+// ---- microphone test
+function stopMicTest() {
+  if (state.micTest) { state.micTest.cancel(); state.micTest = null; }
+}
+async function toggleMicTest() {
+  const btn = $('micBtn'), bar = $('micBar'), txt = $('micText');
+  if (state.micTest) { stopMicTest(); return; }
+  if (state.recorder) { toast('Stop the current recording first.'); return; }
+  btn.disabled = true;
+  txt.textContent = 'Asking for the microphone...';
+  try {
+    const ctl = await runMicTest({
+      onLevel: (db, left) => {
+        bar.style.transform = 'scaleX(' + Math.max(0, Math.min(1, (db + 80) / 70)).toFixed(3) + ')';
+        txt.textContent = 'Listening. ' + Math.round(db) + ' dB. ' + left + ' s left.';
+      },
+      onDone: (peak) => {
+        state.micTest = null;
+        const b = $('micBtn'), t = $('micText'), br = $('micBar');
+        if (br) br.style.transform = 'scaleX(0)';
+        if (b) { b.disabled = false; b.textContent = 'Test microphone'; }
+        if (t) t.textContent = peak < -70 ? 'Done. Peak ' + Math.round(peak) + ' dB. That is very quiet. Move the phone closer or check the mic is not covered.' : 'Done. Peak ' + Math.round(peak) + ' dB. The microphone works.';
+      }
+    });
+    state.micTest = ctl;
+    btn.disabled = false;
+    btn.textContent = 'Stop test';
+  } catch (e) {
+    btn.disabled = false;
+    const m = micErrorFor(e);
+    txt.textContent = m.detail + ' Allow the microphone in your browser settings, and open this page over https.';
+  }
+}
+
+// ---- boot
+async function boot() {
+  setupHold();
+  $('main').addEventListener('click', onMainClick);
+  $('main').addEventListener('input', onMainInput);
+  $('main').addEventListener('change', onMainChange);
+  window.addEventListener('hashchange', onRoute);
+  window.addEventListener('resize', redrawCharts);
+  window.addEventListener('pagehide', () => { flushNote(); if (state.recorder) state.recorder.persist(); });
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: light)');
+    if (mq.addEventListener) mq.addEventListener('change', redrawCharts);
+  } catch (e) { /* ignore */ }
+  state.settings = await Store.loadSettings();
+  state.sessions = await Store.allSessions();
+  await recoverSessions();
+  state.route = parseRoute();
+  render(false);
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('./sw.js').catch((e) => { try { console.warn('Service worker failed', e); } catch (x) { /* ignore */ } });
+  }
+}
+
+// Test hooks; the detector and score code are pure so Node can exercise them.
+const __root = typeof window !== 'undefined' ? window : globalThis;
+__root.__snore = { SnoreDetector, computeScore, chooseSampleSlot, classify, ratingFor };
+if (typeof document !== 'undefined' && document.getElementById('main')) boot();
+</script>
+</body>
+</html>

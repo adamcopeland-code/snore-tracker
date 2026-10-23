@@ -32,10 +32,15 @@ The microphone only works over https, so open the Pages URL, not a raw file.
    versions turn off auto-lock for the night.
 4. In the morning press and hold **Hold to stop** for 1.5 seconds.
 
+## iPhone app (keeps recording with the screen locked)
+
+The same app also runs as a native iPhone app that keeps recording when the screen is locked.
+See [IOS.md](IOS.md) for the steps on a Mac.
+
 ## Limits
 
-- The phone must stay unlocked and on this app all night. Browsers stop
-  the microphone when the screen locks.
+- In the browser, the phone must stay unlocked and on this app all night. Browsers stop
+  the microphone when the screen locks. The iPhone app (IOS.md) is made to record with the screen locked.
 - Detection is based on loudness, rhythm and low-frequency energy. It is
   untuned against real bedrooms, so adjust **Sensitivity** in Settings.
 - Exports contain the minute data, not the audio clips.

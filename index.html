@@ -367,6 +367,21 @@ details.card[open] > summary { margin-bottom: 10px; }
 <script>
 'use strict';
 
+// ---- native (Capacitor iOS)
+// In the iPhone app the SnoreMic plugin owns the microphone. In a browser nothing here is used.
+const NATIVE = typeof window !== 'undefined' && !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+const SnoreMic = NATIVE ? window.Capacitor.registerPlugin('SnoreMic') : null;
+// Clip files live in the app's Documents folder. The folder path can change (for example after a restore),
+// so a clip stores its path relative to Documents ("rel") next to the absolute "path".
+function removeClipFile(rec) {
+  if (NATIVE && rec && rec.rel) { try { SnoreMic.deleteClip({ rel: rec.rel }).catch(() => {}); } catch (e) { /* ignore */ } }
+}
+async function clipSrc(rec) {
+  let path = rec.path;
+  if (rec.rel) { try { path = (await SnoreMic.getInfo()).documents + '/' + rec.rel; } catch (e) { /* use the stored path */ } }
+  return window.Capacitor.convertFileSrc(path);
+}
+
 // ---- storage
 const DB_NAME = 'snoretracker';
 const DB_VERSION = 1;
@@ -476,7 +491,10 @@ const Store = {
     catch (e) { reportError('Could not save this night.', e); return false; }
   },
   async deleteSession(id) {
-    try { await idb.delByIndex('samples', 'sessionId', id); await idb.del('sessions', id); return true; }
+    try {
+      if (NATIVE) ((await idb.byIndex('samples', 'sessionId', id)) || []).forEach(removeClipFile);
+      await idb.delByIndex('samples', 'sessionId', id); await idb.del('sessions', id); return true;
+    }
     catch (e) { reportError('Could not delete this night.', e); return false; }
   },
   async putSample(rec) {
@@ -488,7 +506,10 @@ const Store = {
     catch (e) { reportError('Could not load the audio sample.', e); return null; }
   },
   async deleteSample(id) {
-    try { await idb.del('samples', id); return true; }
+    try {
+      if (NATIVE) removeClipFile(await idb.get('samples', id));
+      await idb.del('samples', id); return true;
+    }
     catch (e) { reportError('Could not delete the audio sample.', e); return false; }
   },
   async samplesFor(sessionId) {
@@ -496,7 +517,9 @@ const Store = {
     catch (e) { reportError('Could not read audio samples.', e); return []; }
   },
   async clearAll() {
-    try { await idb.clear('sessions'); await idb.clear('samples'); await idb.clear('settings'); return true; }
+    try {
+      if (NATIVE) ((await idb.all('samples')) || []).forEach(removeClipFile);
+      await idb.clear('sessions'); await idb.clear('samples'); await idb.clear('settings'); return true; }
     catch (e) { reportError('Could not delete your data.', e); return false; }
   }
 };
@@ -777,6 +800,92 @@ class AudioInput {
   }
 }
 
+// Microphone through the native SnoreMic plugin (iPhone app). The plugin sends a frame {seq, t, db, bandRatio}
+// every 100 ms and keeps them all, so frames missed while the web view was paused (screen locked) are fetched
+// with getFrames() and replayed in order. The detector gets the same numbers as in the browser.
+class NativeInput {
+  constructor() {
+    this.handles = []; this.handler = null; this.pre = []; this.early = [];
+    this.starting = false; this.lastSeq = 0; this.catching = null; this.timer = null;
+    this.levelHandler = null; this.onStatus = null;
+  }
+  async open(record) {
+    this.starting = true;
+    try {
+      this.handles.push(await SnoreMic.addListener('frame', (f) => this._live(f)));
+      this.handles.push(await SnoreMic.addListener('level', (f) => { if (this.levelHandler) this.levelHandler(f.db); }));
+      this.handles.push(await SnoreMic.addListener('status', (st) => {
+        try { console.log('SnoreMic ' + st.type + ' ' + (st.detail || '')); } catch (e) { /* ignore */ }
+        if (this.onStatus) this.onStatus(st);
+      }));
+      const info = await SnoreMic.start({ record: !!record });
+      this.lastSeq = info.seq || 0;
+    } catch (e) {
+      this.starting = false;
+      this.close();
+      throw nativeError(e);
+    }
+    this.starting = false;
+    const early = this.early; this.early = [];
+    early.forEach((f) => this._live(f));
+    if (record) this.timer = setInterval(() => this.catchUp(), 5000);
+  }
+  // Frames wait here until the recorder is ready for them.
+  setHandler(fn) {
+    this.handler = fn;
+    const q = this.pre; this.pre = [];
+    q.forEach((f) => fn(f, false));
+  }
+  _deliver(f, replay) { if (this.handler) this.handler(f, replay); else this.pre.push(f); }
+  _live(f) {
+    if (this.starting) { this.early.push(f); return; }
+    if (f.seq <= this.lastSeq) return;
+    if (f.seq !== this.lastSeq + 1) { this.catchUp(); return; } // a frame was missed
+    this.lastSeq = f.seq;
+    this._deliver(f, false);
+  }
+  // Fetch and replay every frame after lastSeq. One run at a time.
+  catchUp() {
+    if (this.catching) return this.catching;
+    this.catching = (async () => {
+      try {
+        for (;;) {
+          const r = await SnoreMic.getFrames({ after: this.lastSeq, max: 5000 });
+          const list = (r && r.frames) || [];
+          if (!list.length) break;
+          for (let i = 0; i < list.length; i++) {
+            const a = list[i];
+            if (a[0] <= this.lastSeq) continue;
+            this.lastSeq = a[0];
+            this._deliver({ seq: a[0], t: a[1], db: a[2], bandRatio: a[3] }, i < list.length - 1);
+          }
+          await new Promise((res) => setTimeout(res, 0));
+        }
+      } catch (e) { /* the next call tries again */ }
+      this.catching = null;
+    })();
+    return this.catching;
+  }
+  // Last catch-up, then stop the microphone. This also finishes the open audio segment.
+  async finish() {
+    clearInterval(this.timer); this.timer = null;
+    await this.catchUp();
+    await SnoreMic.stop();
+  }
+  close() {
+    clearInterval(this.timer); this.timer = null;
+    this.handler = null; this.levelHandler = null;
+    try { SnoreMic.stop().catch(() => {}); } catch (e) { /* ignore */ }
+    const hs = this.handles; this.handles = [];
+    hs.forEach((h) => { try { h.remove(); } catch (e) { /* ignore */ } });
+  }
+}
+function nativeError(e) {
+  const err = new Error((e && e.message) || 'The microphone did not start.');
+  err.name = (e && e.code === 'permission_denied') ? 'NotAllowedError' : 'NativeError';
+  return err;
+}
+
 // Records one night: level meter, snore detection, per-minute stats, audio samples, persistence.
 class NightRecorder {
   constructor(settings, ui) {
@@ -785,15 +894,15 @@ class NightRecorder {
     this.input = null; this.det = null; this.timer = null; this.session = null;
     this.base = 0; this.curIdx = -1; this.snoreCount = 0;
     this.sampleOn = false; this.mime = ''; this.segTimer = null; this.curSeg = null;
-    this.ring = []; this.pending = []; this.samples = []; this.writes = [];
+    this.ring = []; this.pending = []; this.samples = []; this.writes = []; this.keeps = []; this.orphans = new Set();
     this.wake = null; this.wakeOk = false; this.stopped = false; this.autoStopFired = false;
     this.saving = Promise.resolve();
     this._onVis = () => this.onVisible();
   }
 
   async start() {
-    const input = new AudioInput();
-    await input.open();
+    const input = NATIVE ? new NativeInput() : new AudioInput();
+    await input.open(this.settings.recordSamples);
     this.input = input;
     try {
       const now = Date.now();
@@ -809,7 +918,12 @@ class NightRecorder {
       this.ensureMinute(0);
       this.curIdx = 0;
       await this.persist();
-      this.timer = setInterval(() => this.tick(), 100);
+      if (NATIVE) {
+        input.onStatus = (st) => { if (st.type === 'recorderError') this.sampleFail(); };
+        input.setHandler((f, replay) => this.step(f.db, f.bandRatio, f.t, replay));
+      } else {
+        this.timer = setInterval(() => this.tick(), 100);
+      }
     } catch (e) {
       this.releaseAll();
       throw e;
@@ -820,6 +934,11 @@ class NightRecorder {
 
   // ---- wake lock and visibility
   async requestWake() {
+    if (NATIVE) { // the plugin keeps the screen from auto-locking while it records
+      this.wakeOk = true;
+      if (this.ui.onWake) this.ui.onWake(true);
+      return;
+    }
     try {
       if (!('wakeLock' in navigator)) { this.wakeOk = false; }
       else if (!this.wake || this.wake.released) {
@@ -831,6 +950,7 @@ class NightRecorder {
   }
   onVisible() {
     if (document.visibilityState !== 'visible' || this.stopped) return;
+    if (NATIVE) { this.input.catchUp(); return; }
     this.requestWake();
     const c = this.input && this.input.ctx;
     if (c && c.state !== 'running' && c.state !== 'closed') c.resume().catch(() => {});
@@ -842,14 +962,20 @@ class NightRecorder {
     const now = Date.now();
     let r;
     try { r = this.input.read(); } catch (e) { return; }
-    const idx = Math.floor((now - this.base) / 60000);
+    this.step(r.db, r.ratio, now, false);
+  }
+
+  // One 100 ms frame. In the browser tick() makes it; in the iPhone app the plugin sends it (replay = caught up later).
+  step(db, ratio, now, replay) {
+    if (this.stopped) return;
+    const idx = Math.max(0, Math.floor((now - this.base) / 60000));
     if (idx !== this.curIdx) { this.ensureMinute(idx); this.curIdx = idx; this.persist(); }
     const m = this.session.minutes[idx];
-    if (r.db > m.peakDb) m.peakDb = round1(r.db);
-    const evs = this.det.push(r.db, r.ratio, now);
+    if (db > m.peakDb) m.peakDb = round1(db);
+    const evs = this.det.push(db, ratio, now);
     if (this.det.floorDb != null) m.floorDb = round1(this.det.floorDb);
     for (const ev of evs) this.onSnore(ev);
-    if (this.ui.onTick) this.ui.onTick({ db: r.db, count: this.snoreCount, now, floorDb: this.det.floorDb });
+    if (this.ui.onTick && !replay) this.ui.onTick({ db, count: this.snoreCount, now, floorDb: this.det.floorDb });
     const h = this.settings.autoStopHours;
     if (h && !this.autoStopFired && now - this.session.start >= h * 3600000) {
       this.autoStopFired = true;
@@ -892,6 +1018,7 @@ class NightRecorder {
   // ---- audio samples: each 10 s segment is its own standalone file
   setupSamples() {
     if (!this.settings.recordSamples) { this.session.sampleNote = 'off'; return; }
+    if (NATIVE) { this.sampleOn = true; return; } // the plugin writes the segments
     if (typeof MediaRecorder === 'undefined') { this.session.sampleNote = 'unsupported'; return; }
     this.mime = pickMime();
     this.curSeg = this.startSegment();
@@ -951,10 +1078,19 @@ class NightRecorder {
   }
   sampleCandidate(ev) {
     const cand = { mid: (ev.start + ev.end) / 2, t: ev.start, aboveDb: ev.aboveDb, peakDb: ev.peakDb, cls: ev.cls };
+    if (NATIVE) { this.keepNative(cand); return; }
     for (const seg of this.ring) {
       if (cand.mid >= seg.t0 && cand.mid <= seg.t1) { this.offer(seg, cand); return; }
     }
     this.pending.push(cand);
+  }
+  // iPhone app: ask the plugin for the file that covers the snore. It answers when that 10 s segment is finished.
+  keepNative(cand) {
+    const p = SnoreMic.keepSegment({ t: cand.mid })
+      .then((seg) => this.offer(seg, cand))
+      .catch(() => { /* no segment covers it any more */ });
+    this.keeps.push(p);
+    p.then(() => { const i = this.keeps.indexOf(p); if (i >= 0) this.keeps.splice(i, 1); });
   }
   offer(seg, cand) {
     const id = this.session.id + '-' + seg.t0;
@@ -968,10 +1104,11 @@ class NightRecorder {
     }
     const meta = {
       id, sessionId: this.session.id, t: cand.t, peakDb: round1(cand.peakDb), aboveDb: round1(cand.aboveDb), cls: cand.cls,
-      mime: seg.blob.type || this.mime, durationMs: seg.t1 - seg.t0, clipStart: seg.t0
+      mime: seg.mime || seg.blob.type || this.mime, durationMs: seg.t1 - seg.t0, clipStart: seg.t0
     };
+    if (seg.rel) { meta.path = seg.path; meta.rel = seg.rel; }
     const choice = chooseSampleSlot(this.samples, meta, this.settings.maxSamples, this.session.start);
-    if (choice.action === 'skip') return;
+    if (choice.action === 'skip') { if (seg.rel) this.orphans.add(seg.rel); return; } // deleted at the end of the night
     if (choice.action === 'replace') {
       this.samples = this.samples.filter((s) => s !== choice.victim);
       this.writes.push(Store.deleteSample(choice.victim.id));
@@ -980,10 +1117,19 @@ class NightRecorder {
     this.writeSample(meta, seg);
   }
   writeSample(meta, seg) {
-    this.writes.push(Store.putSample(Object.assign({}, meta, { blob: seg.blob })));
+    this.writes.push(Store.putSample(seg.blob ? Object.assign({}, meta, { blob: seg.blob }) : Object.assign({}, meta)));
   }
   async finishSamples() {
     clearInterval(this.segTimer);
+    if (NATIVE) {
+      try { await this.input.finish(); } catch (e) { /* ignore */ }
+      await Promise.all(this.keeps.slice());
+      this.pending = [];
+      await Promise.all(this.writes);
+      // Clip files that were kept by the plugin but not used by any saved sample.
+      this.orphans.forEach((rel) => { if (!this.samples.some((x) => x.rel === rel)) removeClipFile({ rel }); });
+      return;
+    }
     const seg = this.curSeg;
     this.curSeg = null;
     if (seg && seg.mr.state !== 'inactive') {
@@ -1006,6 +1152,7 @@ class NightRecorder {
 
   async stop() {
     if (this.stopped) return this.session;
+    if (NATIVE && this.input) { try { await this.input.catchUp(); } catch (e) { /* ignore */ } }
     this.stopped = true;
     clearInterval(this.timer);
     const now = Date.now();
@@ -1021,10 +1168,10 @@ class NightRecorder {
 
 // Microphone test: live level meter for 10 s without starting a session.
 async function runMicTest(ui) {
-  const input = new AudioInput();
-  await input.open();
+  const input = NATIVE ? new NativeInput() : new AudioInput();
+  await input.open(false);
   const t0 = Date.now();
-  let peak = -100, stopped = false;
+  let peak = -100, stopped = false, timer = null;
   const finish = () => {
     if (stopped) return;
     stopped = true;
@@ -1032,14 +1179,21 @@ async function runMicTest(ui) {
     input.close();
     if (ui.onDone) ui.onDone(peak);
   };
-  const timer = setInterval(() => {
+  const onLevel = (db) => {
     const elapsed = Date.now() - t0;
-    let r;
-    try { r = input.read(); } catch (e) { return; }
-    if (r.db > peak) peak = r.db;
-    if (ui.onLevel) ui.onLevel(r.db, Math.max(0, 10 - Math.floor(elapsed / 1000)));
+    if (db > peak) peak = db;
+    if (ui.onLevel) ui.onLevel(db, Math.max(0, 10 - Math.floor(elapsed / 1000)));
     if (elapsed >= 10000) finish();
-  }, 100);
+  };
+  if (NATIVE) {
+    input.levelHandler = onLevel; // the plugin sends a level event every 100 ms
+  } else {
+    timer = setInterval(() => {
+      let r;
+      try { r = input.read(); } catch (e) { return; }
+      onLevel(r.db);
+    }, 100);
+  }
   return { cancel: finish };
 }
 
@@ -1795,10 +1949,12 @@ async function playSample(id, btn) {
   if (playing.id === id) { stopPlayback(); return; }
   stopPlayback();
   const rec = await Store.getSample(id);
-  if (!rec || !rec.blob) { toast('That clip is no longer available.'); return; }
-  playing.url = URL.createObjectURL(rec.blob);
+  if (!rec || !(rec.blob || rec.path || rec.rel)) { toast('That clip is no longer available.'); return; }
+  let src;
+  if (rec.blob) { playing.url = URL.createObjectURL(rec.blob); src = playing.url; }
+  else src = await clipSrc(rec);
   playing.id = id; playing.btn = btn;
-  p.src = playing.url;
+  p.src = src;
   p.onended = () => stopPlayback();
   try { await p.play(); setPlayBtn(btn, true); }
   catch (e) { toast('Your browser could not play this clip.'); stopPlayback(); }
@@ -1864,6 +2020,7 @@ function micErrorFor(e) {
   const n = e && e.name;
   let detail;
   if (n === 'InsecureContext') detail = 'Browsers only allow microphone access on pages opened over https.';
+  else if (n === 'NotAllowedError' && NATIVE) detail = 'The microphone is blocked. Allow it in Settings > Snore Tracker > Microphone.';
   else if (n === 'NotAllowedError' || n === 'SecurityError') detail = 'The microphone is blocked for this site.';
   else if (n === 'NotFoundError' || n === 'OverconstrainedError') detail = 'No microphone was found on this device.';
   else if (n === 'NotReadableError' || n === 'AbortError') detail = 'Another app may be using the microphone.';
@@ -2116,7 +2273,7 @@ async function toggleMicTest() {
   } catch (e) {
     btn.disabled = false;
     const m = micErrorFor(e);
-    txt.textContent = m.detail + ' Allow the microphone in your browser settings, and open this page over https.';
+    txt.textContent = m.detail + (NATIVE ? '' : ' Allow the microphone in your browser settings, and open this page over https.');
   }
 }
 
@@ -2138,7 +2295,7 @@ async function boot() {
   await recoverSessions();
   state.route = parseRoute();
   render(false);
-  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+  if (!NATIVE && 'serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('./sw.js').catch((e) => { try { console.warn('Service worker failed', e); } catch (x) { /* ignore */ } });
   }
 }

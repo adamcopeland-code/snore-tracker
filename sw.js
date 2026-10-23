@@ -1,6 +1,6 @@
 /* Snore Tracker service worker.
    Bump CACHE when any precached file changes so clients pick up the new version. */
-const CACHE = 'snore-tracker-v1';
+const CACHE = 'snore-tracker-v2';
 const PREFIX = 'snore-tracker-';
 const PRECACHE = [
   './',

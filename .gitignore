@@ -1,0 +1,13 @@
+node_modules/
+www/
+.DS_Store
+xcuserdata/
+*.xcuserstate
+ios/App/build/
+ios/App/DerivedData/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/CapApp-SPM/.build/
+ios/App/CapApp-SPM/.swiftpm/
+.build/
+.swiftpm/
